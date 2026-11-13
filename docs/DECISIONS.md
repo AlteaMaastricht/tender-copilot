@@ -132,3 +132,9 @@ Rule applied: new dependencies need Arthur's approval; releases must be at least
 Lock file: `uv.lock` is approved and generated. Commit it with the skeleton, not separately. The Dockerfile still installs with pip and does not use the lock yet.
 
 Docker: not yet tested (Docker is not installed on this Mac). Run `make up` locally before relying on it. CI does not build the image yet.
+
+---
+
+## eForms identifiers (13 Nov 2026)
+
+Every BT and OPP identifier in ingest/ted.py is from memory and unverified. Each is marked “(confirm)” in the code. Verify all of them against the eForms SDK version used by the notices in the Phase 0 notebook, before any eval relies on them.

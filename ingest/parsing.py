@@ -212,3 +212,22 @@ def parse_date(value: object) -> date | None:
     if parsed is None or not MIN_YEAR <= parsed.year <= MAX_YEAR:
         return None
     return parsed
+
+
+# Closing dates that mean "unknown" (ARCHITECTURE.md 2.3, DECISIONS.md data findings).
+PLACEHOLDER_DEADLINE = date(2099, 12, 31)
+MAX_DEADLINE_YEARS = 5
+
+
+def _add_years(day: date, years: int) -> date:
+    try:
+        return day.replace(year=day.year + years)
+    except ValueError:  # 29 February in a non-leap target year
+        return day.replace(year=day.year + years, day=28)
+
+
+def is_placeholder_deadline(closing: date, published: date | None) -> bool:
+    """True for 2099-12-31, or a closing date more than five years after publication."""
+    if closing == PLACEHOLDER_DEADLINE:
+        return True
+    return published is not None and closing > _add_years(published, MAX_DEADLINE_YEARS)

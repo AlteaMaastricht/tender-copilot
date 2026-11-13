@@ -5,6 +5,7 @@ import pytest
 
 from ingest.parsing import (
     _clean_text,
+    is_placeholder_deadline,
     parse_amount,
     parse_currency,
     parse_date,
@@ -195,3 +196,22 @@ def test_parse_date_empty_and_invalid(raw: object) -> None:
 )
 def test_clean_text(raw: object, expected: str | None) -> None:
     assert _clean_text(raw) == expected
+
+
+# --- is_placeholder_deadline --------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("closing", "published", "expected"),
+    [
+        (date(2099, 12, 31), date(2026, 9, 18), True),
+        (date(2099, 12, 31), None, True),
+        (date(2031, 9, 18), date(2026, 9, 18), False),  # exactly five years
+        (date(2031, 9, 19), date(2026, 9, 18), True),  # five years and one day
+        (date(2026, 11, 17), date(2026, 9, 18), False),
+        (date(2033, 3, 1), date(2028, 2, 29), True),  # leap day publication
+        (date(2040, 1, 1), None, False),  # no publication date: only 2099-12-31 counts
+    ],
+)
+def test_is_placeholder_deadline(closing: date, published: date | None, expected: bool) -> None:
+    assert is_placeholder_deadline(closing, published) is expected

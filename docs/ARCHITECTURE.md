@@ -86,16 +86,16 @@ Applied to eForms fields and the TenderNed publication detail; each rule records
 
 | Rule | Source | From COMPANY.md |
 |---|---|---|
-| Country is NL | buyer country, place of performance | section 4, 5 |
-| Main or additional CPV starts with 72, 79, 48, 73 | BT-262, BT-263 | section 4 |
-| Notice is a contract notice, not an award or prior information notice | notice type | n/a |
-| Deadline is in the future and at least 10 working days after publication | `sluitingsDatum` from TenderNed `/publicaties/{id}`, publication date | section 5 |
+| Country is NL | buyer country (first buyer); a lot's place of performance outside NL is the flag `place_outside_nl`, not a fail | section 4, 5; decision S3 |
+| Main or additional CPV starts with 72, 79, 48, 73, at procedure or lot level | BT-262, BT-263 | section 4 (CPV 73 adds the flag `cpv_73_check_scope`) |
+| Notice is a contract notice (`cn-standard`, `cn-social`); award, prior information, VEAT and market-consultation notices fail | notice type | n/a |
+| Deadline is in the future and at least 10 working days (Monday to Friday) after publication | `sluitingsDatum` from TenderNed `/publicaties/{id}`, TED publication date | section 5 |
 | Closing date is a real date. `2099-12-31`, a date more than five years after publication, or a missing date gives `unknown` | `sluitingsDatum`, publication date | n/a (`DECISIONS.md`, data findings) |
-| Estimated value, when present, is between EUR 50k and EUR 2M | BT-27 | section 4 (above 2M is flagged "consortium only", not dropped) |
-| Security clearance not required | BT-578 | section 5 |
-| Main nature is services | BT-23 | section 5 (hardware supply) |
+| Estimated value is between EUR 50k and EUR 2M, checked per lot: lot values first, the procedure value only when no lot has one. Passes if any lot is in range; above 2M only gives pass with the flag `consortium_only`; no value gives `unknown` | BT-27 (lot, then procedure) | section 4; Q11 |
+| Main nature: `supplies` or `works` gives the flag `nature_supplies`, not a fail (software packages are often classed as supplies) | BT-23 | section 5 (hardware supply) |
+| Security clearance not required: **deferred** until the parser reads BT-578 | BT-578 | section 5 |
 
-The outcome is recorded in `filter_result`, for example `{"deadline": {"outcome": "unknown", "reason": "placeholder_date", "raw": "2099-12-31"}}`. Reasons: `placeholder_date`, `missing`, `no_tenderned_match`. In all three cases `deadline_at` is null.
+The outcome is recorded in `filter_result`, for example `{"deadline": {"outcome": "unknown", "reason": "placeholder_date", "raw": "2099-12-31"}}`. Reasons: `placeholder_date`, `missing`, `no_tenderned_match` (in these three cases `deadline_at` is null), and `closed`, `too_short` and `below_50k` for definite fails.
 
 ### 2.4 Screening (Stage 1)
 

@@ -46,10 +46,10 @@ Never record credentials here. Keep evidence (emails, screenshots, terms pages) 
 
 | # | Question | Status | Decision / answer | Evidence |
 |---|---|---|---|---|
-| Q8 | One memo per tender, or per lot? | Open | | |
+| Q8 | One memo per tender, or per lot? | Open | Value rule (hard filter) checks per lot: lot values first, the procedure value (BT-27) only when no lot has a value, no value at all gives `unknown` with a flag. The memo question (one memo per tender or per lot) is still open. | |
 | Q9 | Fit score: formula in code, and weights? | Open | | |
 | Q10 | Memo language: Dutch, English, or the tender's language? | Open | | |
-| Q11 | Tenders above EUR 2M: drop, or keep with "consortium only"? | Proposed | Keep, with a "consortium only" flag. | Matches `COMPANY.md` section 4. |
+| Q11 | Tenders above EUR 2M: drop, or keep with "consortium only"? | Decided | Keep, with a 'consortium only' flag (hard filter: outcome pass, flag `consortium_only`). | Matches `COMPANY.md` section 4. |
 | Q12 | Tenders per day at Stage 2, and the daily cost cap? | Open | | Set after the Phase 3 cost measurements. |
 | Q13 | Should "unsure" screening results always be shortlisted? | Proposed | Yes. | Stage 1 is tuned for recall. |
 
@@ -110,6 +110,7 @@ Monthly counts (2026):
 |---|---|---|
 | 13 Nov 2026 | Arthur | Initial log created. Scope decisions S1–S6 recorded. |
 | 13 Nov 2026 | Arthur | Snapshot selection recorded: seed 20261113, mix 50/30/70, deadline-check result. Data finding on spreadsheet closing dates added. |
+| 13 Nov 2026 | Arthur | Q11 decided; Q8 note for the value rule; hard filter rule scope recorded. |
 
 ---
 
@@ -138,3 +139,11 @@ Docker: not yet tested (Docker is not installed on this Mac). Run `make up` loca
 ## eForms identifiers (13 Nov 2026)
 
 Every BT and OPP identifier in ingest/ted.py is from memory and unverified. Each is marked “(confirm)” in the code. Verify all of them against the eForms SDK version used by the notices in the Phase 0 notebook, before any eval relies on them.
+
+---
+
+## Hard filter rules (13 Nov 2026)
+
+`pipeline/filter.py` implements five rules: country, CPV, deadline, value and notice type. Main nature (BT-23) is a flag `nature_supplies`, not a fail, because software packages (CPV 48) are often classed as supplies. Security clearance (BT-578) is deferred until the parser reads it. Working days count Monday to Friday; Dutch public holidays are not counted.
+
+| 13 Nov 2026 | public-xml returns 200 with credentials (430496, 430969). The earlier 403 came from swapped user and password in .env. TenderNed returns 403, not 401, for wrong credentials. | Q1: XML access confirmed. Drop the public-xml question from the TenderNed email; keep the terms question. Don’t read a 403 as a permission problem. |

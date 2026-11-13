@@ -348,7 +348,9 @@ def download_one(pub_id: str, docs: list[dict[str, Any]], auth: str | None) -> N
 
 def parse_args(argv: list[str]) -> list[str]:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("publication_ids", nargs="+", help=f"TenderNed publication IDs (max {MAX_IDS})")
+    parser.add_argument(
+        "publication_ids", nargs="+", help=f"TenderNed publication IDs (max {MAX_IDS})"
+    )
     ids = parser.parse_args(argv).publication_ids
     if len(ids) > MAX_IDS:
         parser.error(f"at most {MAX_IDS} publication IDs; this is a probe, not a bulk download")

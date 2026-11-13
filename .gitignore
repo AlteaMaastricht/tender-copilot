@@ -221,3 +221,6 @@ __marimo__/
 
 # Raw tender documents (never committed)
 data/raw/
+
+# Local databases
+*.db

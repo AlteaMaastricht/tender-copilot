@@ -40,7 +40,7 @@
     {
       "publication_number": "643806-2026",
       "file": "643806-2026.xml",
-      "role": "contract_notice",
+      "role": "change_notice",
       "source_url": "https://ted.europa.eu/en/notice/643806-2026/xml",
       "http_status": 200,
       "sha256": "93d76d57c7925400b3677e4c51e55096ce37fab86be5e14c03e8ce6842862bc8",
@@ -172,6 +172,24 @@
       "changes_notice": null,
       "redacted": true,
       "contact_blocks_removed": 6
+    },
+    {
+      "publication_number": "688608-2026",
+      "file": "688608-2026.xml",
+      "role": "contract_notice",
+      "source_url": "https://ted.europa.eu/en/notice/688608-2026/xml",
+      "http_status": 200,
+      "sha256": "e4b722b5fde0b9f10fb620fa24f09a79067a9f05a2fbe1afcefaac486a1ac3a4",
+      "redacted": true,
+      "contact_blocks_removed": 2,
+      "notice_type": "cn-standard",
+      "cpv_group": "79",
+      "main_cpv": "79800000",
+      "publication_date": "2026-10-06+02:00",
+      "procedure_id": "affffe94-3c75-4c99-b34b-5940e9e2fdfc",
+      "notice_id": "078c0cd2-f3f3-46ba-822e-d56c9be776c6",
+      "changes_notice": null,
+      "fetched_at": "2026-11-13T16:23:42+00:00"
     }
   ],
   "not_found": [

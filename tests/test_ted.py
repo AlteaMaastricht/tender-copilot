@@ -5,6 +5,7 @@ by editing fixture bytes in memory; no extra fixture files are written.
 """
 
 import dataclasses
+import json
 import re
 from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -43,9 +44,29 @@ def notices() -> dict[str, TedNotice]:
 # --- parsing all fixtures -----------------------------------------------------
 
 
+def _manifest() -> dict:
+    return json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
+
+
 def test_all_fixtures_parse_and_ids_match_file_names(notices: dict[str, TedNotice]) -> None:
-    assert len(XML_FILES) == 10
+    assert len(XML_FILES) == len(_manifest()["notices"]) >= 10
     assert sorted(notices) == sorted(p.stem for p in XML_FILES)
+
+
+def test_manifest_matches_the_parsed_notices(notices: dict[str, TedNotice]) -> None:
+    """The manifest role of every notice must agree with what the parser reads in the XML."""
+    for entry in _manifest()["notices"]:
+        n = notices[entry["publication_number"]]
+        who = entry["publication_number"]
+        assert (entry["role"] == "change_notice") == n.is_change, f"{who}: role"
+        expected_change = (
+            f"{n.changed_notice_id}-{n.changed_notice_version}" if n.is_change else None
+        )
+        assert entry["changes_notice"] == expected_change, f"{who}: changes_notice"
+        assert entry["procedure_id"] == n.procedure_id, f"{who}: procedure_id"
+        assert entry["notice_id"] == n.notice_id, f"{who}: notice_id"
+        assert entry["main_cpv"] == n.cpv_main, f"{who}: main_cpv"
+        assert entry["publication_date"][:10] == n.publication_date.isoformat(), f"{who}: date"
 
 
 EXPECTED = [
@@ -265,3 +286,83 @@ def test_contact_blocks_are_ignored() -> None:
 def test_records_have_no_contact_fields() -> None:
     names = {f.name for f in dataclasses.fields(TedNotice)}
     assert not names & {"contact", "contacts", "email", "phone", "telephone"}
+
+
+# --- multi-lot notice 688608-2026 (ZonMW, 3 lots) ------------------------------
+
+MULTI_LOT = "688608-2026"
+# Lot values and the deadline date were also reported by the TED search API before the
+# fetch, so these expectations do not come from the parser alone.
+LOT_VALUES = (Decimal("250000"), Decimal("300000"), Decimal("450000"))
+LOT_DEADLINE = datetime(2026, 11, 23, 16, 0, tzinfo=UTC)
+
+
+def test_multi_lot_notice_lots(notices: dict[str, TedNotice]) -> None:
+    n = notices[MULTI_LOT]
+    assert len(n.lots) == 3
+    assert [lot.lot_id for lot in n.lots] == ["LOT-0001", "LOT-0002", "LOT-0003"]
+    assert [lot.title for lot in n.lots] == [
+        "Perceel 1 - DTP",
+        "Perceel 2 - Grafische vormgeving van illustraties en animatie",
+        "Perceel 3 - Grafische ontwerp voor technische producten",
+    ]
+    assert tuple(lot.estimated_value for lot in n.lots) == LOT_VALUES
+    assert {lot.currency for lot in n.lots} == {"EUR"}
+    assert {lot.cpv_main for lot in n.lots} == {"79800000"}
+    assert {lot.place_country for lot in n.lots} == {"NLD"}
+    assert n.estimated_value == sum(LOT_VALUES)  # procedure-level BT-27 is the lot total here
+    assert not n.is_change and n.warnings == ()
+
+
+def test_multi_lot_notice_per_lot_deadlines(notices: dict[str, TedNotice]) -> None:
+    n = notices[MULTI_LOT]
+    for lot in n.lots:
+        assert lot.tender_deadline == LOT_DEADLINE
+        assert lot.participation_deadline is None
+    assert (n.deadline, n.deadline_kind, n.deadline_status) == (LOT_DEADLINE, "tender", "ok")
+
+
+def _set_lot_end_dates(text: str, end_dates: list[str]) -> str:
+    """Give each lot's BT-131 EndDate a new value, in lot order (in memory only)."""
+    pattern = re.compile(
+        r"(<cac:TenderSubmissionDeadlinePeriod>\s*<cbc:EndDate>)[^<]*(</cbc:EndDate>)"
+    )
+    assert len(pattern.findall(text)) == len(end_dates)
+    values = iter(end_dates)
+    return pattern.sub(lambda m: f"{m.group(1)}{next(values)}{m.group(2)}", text)
+
+
+def test_notice_deadline_is_the_earliest_real_lot_deadline(notices: dict[str, TedNotice]) -> None:
+    real = notices[MULTI_LOT]
+    assert real.deadline == min(lot.tender_deadline for lot in real.lots)
+
+    # Lots with different deadlines: the earliest one (lot 2) wins.
+    n = _parse_text(
+        _set_lot_end_dates(
+            _xml(MULTI_LOT), ["2026-12-01+00:00", "2026-11-05+00:00", "2026-11-20+00:00"]
+        )
+    )
+    assert n.deadline == datetime(2026, 11, 5, 16, 0, tzinfo=UTC) == n.lots[1].tender_deadline
+    assert n.deadline == min(lot.tender_deadline for lot in n.lots)
+    assert n.deadline_status == "ok"
+
+
+def test_placeholder_lot_deadline_is_skipped_for_the_earliest() -> None:
+    # The earliest-looking lot carries the 2099-12-31 placeholder: it is ignored,
+    # and the earliest REAL deadline (lot 3) wins.
+    n = _parse_text(
+        _set_lot_end_dates(
+            _xml(MULTI_LOT), ["2099-12-31+00:00", "2026-11-25+00:00", "2026-11-20+00:00"]
+        )
+    )
+    assert n.lots[0].tender_deadline is None
+    assert n.deadline == datetime(2026, 11, 20, 16, 0, tzinfo=UTC) == n.lots[2].tender_deadline
+    assert n.deadline_status == "ok"
+    assert "placeholder:deadline" not in n.warnings
+
+
+def test_all_lot_deadlines_placeholder() -> None:
+    n = _parse_text(_set_lot_end_dates(_xml(MULTI_LOT), ["2099-12-31+00:00"] * 3))
+    assert all(lot.tender_deadline is None for lot in n.lots)
+    assert (n.deadline, n.deadline_status) == (None, "placeholder")
+    assert "placeholder:deadline" in n.warnings

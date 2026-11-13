@@ -3,10 +3,8 @@ BIN := $(VENV)/bin
 
 .PHONY: install up test lint ingest evals
 
-install:  ## create .venv and install the project with dev tools
-	python3.12 -m venv $(VENV)
-	$(BIN)/pip install --upgrade pip
-	$(BIN)/pip install -e ".[dev]"
+install:  ## create .venv from uv.lock (needs uv)
+	uv sync --locked --extra dev
 
 up:  ## start db and app with docker compose
 	docker compose up -d --build

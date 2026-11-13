@@ -87,3 +87,25 @@ Never record credentials here. Keep evidence (emails, screenshots, terms pages) 
 | Date | Reviewer | Change |
 |---|---|---|
 | 13 Nov 2026 | Arthur | Initial log created. Scope decisions S1–S6 recorded. |
+
+---
+
+## Dependencies (13 November 2026)
+
+Rule applied: new dependencies need Arthur's approval; releases must be at least two weeks old. The lock file resolves only releases before 30 October 2026 (`[tool.uv] exclude-newer` in `pyproject.toml`).
+
+| Package | Version | Status | Reason |
+|---|---|---|---|
+| fastapi | 0.162.0 | Approved | App service and `/health` endpoint. |
+| uvicorn | 0.54.0 | Approved | ASGI server in Docker. |
+| pydantic | 2.14.2 | Approved | Schema validation. Pinned to 2.14.2 (uploaded 29 Oct 2026), not 2.14.3 (uploaded 5 Nov 2026, under two weeks old). |
+| pytest | 9.2.0 | Approved (dev) | Test runner. |
+| ruff | 0.17.3 | Approved (dev) | Lint and format. |
+| httpx | 0.28.1 | Approved (dev) | Test client for FastAPI. Switch to httpx2 deferred to the agent-loop tests. |
+| setuptools | 84.2.1 | Approved (build only) | Build backend. |
+| opentelemetry-api | 1.45.2 | Approved (transitive) | Pulled in by FastAPI. Not a direct dependency. |
+| uv | 0.13.6 | Approved (tool) | Creates `.venv` from `uv.lock`. Installed on Arthur's Mac and in CI. |
+
+Lock file: `uv.lock` is approved and generated. Commit it with the skeleton, not separately. The Dockerfile still installs with pip and does not use the lock yet.
+
+Docker: not yet tested (Docker is not installed on this Mac). Run `make up` locally before relying on it. CI does not build the image yet.

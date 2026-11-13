@@ -5,7 +5,7 @@ Items marked **(confirm)** were not checked against a live source and must be ve
 
 ## 1. Design principles
 
-1. **Code decides what code can decide.** Hard rules (country, CPV, deadline, value range) are checked in Python on eForms fields. Models only make judgements that need reading.
+1. **Code decides what code can decide.** Hard rules (country, CPV, deadline, value range) are checked in Python on eForms fields and the TenderNed publication detail. Models only make judgements that need reading.
 2. **Pipeline first, agent where it earns its place.** Stage 2 is a fixed sequence with typed outputs. The agent loop runs only for requirement matching and chat, where the model must choose its own searches.
 3. **Recall over precision for knock-outs.** Requirements are found by reading the key documents in full, not by top-k retrieval. "Unclear" is a valid answer and goes to a human.
 4. **Every claim has a checkable citation.** A quote plus document and page, verified in code against the stored page text.
@@ -18,7 +18,7 @@ Items marked **(confirm)** were not checked against a live source and must be ve
 ```
                    ┌────────────── daily job (cron, 06:00 CET) ──────────────┐
 TED Search API ──► 1 ingest notices ──► 2 hard filter ──► 3 screen (small model)
-                     (eForms fields)      (code)             │ shortlist / unsure
+                     (eForms + TenderNed) (code)             │ shortlist / unsure
                                                              ▼
 TenderNed ───────────────────────────► 4 fetch + parse documents ──► 5 chunk + embed
                                                              │
@@ -40,9 +40,9 @@ Company KB ──(embedded once)──►  6 extract ──► 7 match (agent lo
 
 | Module | Responsibility |
 |---|---|
-| `ingest/ted.py` | Query the TED Search API for NL notices by CPV prefix and publication date; fetch notice XML; map eForms fields to `tenders`, `lots`, `contacts`. |
-| `ingest/tenderned.py` | Resolve the TenderNed publication from the notice's documents URL (BT-15); list and download its documents. Sets `documents_access` when the tender is hosted elsewhere or needs a login. |
-| `ingest/documents.py` | Unzip, hash, classify document type, extract text per page (PDF, DOCX), detect scanned files, detect language. |
+| `ingest/ted.py` | Query the TED Search API for NL notices by CPV prefix and publication date; fetch notice XML; map eForms fields to `tenders`, `lots`, `contacts`. The deadline is not taken from the notice. |
+| `ingest/tenderned.py` | At ingest: walk the public publication list for the same date window, fetch each publication detail (`/publicaties/{id}`), link it to the TED notice on `pbNummerTed`, and supply `sluitingsDatum`. For shortlisted tenders: list documents (`/publicaties/{id}/documenten`) and download each through its `links.download.href`. Sets `documents_access` when the tender is hosted elsewhere or needs a login. |
+| `ingest/documents.py` | Unpack ZIP archives recursively, hash, apply the name rules, extract text per page from PDF, DOCX, PPTX, XLSX and legacy DOC, detect scanned files and language, track versions. See 2.10. |
 | `rag/chunk.py`, `rag/embed.py` | Section-based chunking with a fixed-size fallback; embedding; writes `chunks`. |
 | `rag/search.py` | Hybrid search (vector + full-text, reciprocal rank fusion) over `chunks` and `company_kb`. |
 | `llm/client.py` | The gateway: provider adapters (Anthropic, OpenAI, one of Gemini/Mistral), redaction, schema validation with one retry, cost and latency logging to `llm_calls`. |
@@ -62,8 +62,8 @@ Company KB ──(embedded once)──►  6 extract ──► 7 match (agent lo
 
 | Step | Input | Output | Tender status after |
 |---|---|---|---|
-| 1 Ingest | TED search, last 2 days (overlap on purpose) | upsert `tenders`, `lots`, `contacts` | `new` |
-| 2 Hard filter | eForms fields | `filter_result` JSON on the tender | `filtered_out` or stays `new` |
+| 1 Ingest | TED search, last 2 days (overlap on purpose); TenderNed publication list and details for the same window | upsert `tenders` (with `tenderned_id`, `deadline_at`), `lots`, `contacts` | `new` |
+| 2 Hard filter | eForms fields, `sluitingsDatum` | `filter_result` JSON on the tender | `filtered_out` or stays `new` |
 | 3 Screen | title, description, CPV, buyer type, value, lots | `assessments` (stage `screening`) | `screened_out` or `shortlisted` |
 | 4 Fetch documents | TenderNed | `documents`, `document_pages` | `docs_ready` or `docs_unavailable` |
 | 5 Chunk and embed | pages | `chunks` | `docs_ready` |
@@ -73,7 +73,8 @@ Company KB ──(embedded once)──►  6 extract ──► 7 match (agent lo
 
 Rules:
 
-- **Upsert key:** the procedure identifier (BT-04), not the notice. A change or cancellation notice updates the same tender row and bumps `notice_version`. A changed deadline or new documents reset the status to `shortlisted` so the tender is re-analysed.
+- **Upsert key:** the procedure identifier (BT-04), not the notice. A change or cancellation notice updates the same tender row and bumps `notice_version`. A changed `sluitingsDatum` or a new document version resets the status to `shortlisted` so the tender is re-analysed.
+- **TenderNed link:** the join key is `pbNummerTed` on the publication detail **(confirm format against the TED publication number)**. With no match, `tenderned_id` and `deadline_at` stay null, the deadline rule is `unknown`, and `documents_access` is `none`. The notice deadline is never used as a fallback.
 - **`docs_unavailable`:** the tender still appears in the inbox with a notice-only memo marked "documents not accessible", and a link to the buyer's platform.
 - **Failure:** any step failure sets `status = 'failed'` with `error` and the failed step; the next run retries from that step, three attempts at most.
 - **"Unsure" screening results are shortlisted.** Stage 1 is tuned for recall.
@@ -81,17 +82,20 @@ Rules:
 
 ### 2.3 Hard filter (code, no model)
 
-Applied to eForms fields; each rule records pass, fail or unknown. A tender is dropped only on a definite fail.
+Applied to eForms fields and the TenderNed publication detail; each rule records pass, fail or unknown. A tender is dropped only on a definite fail. Unknown is not a pass: the tender continues to screening, is flagged in the inbox, and the memo lists it under `limitations`.
 
 | Rule | Source | From COMPANY.md |
 |---|---|---|
 | Country is NL | buyer country, place of performance | section 4, 5 |
 | Main or additional CPV starts with 72, 79, 48, 73 | BT-262, BT-263 | section 4 |
 | Notice is a contract notice, not an award or prior information notice | notice type | n/a |
-| Deadline is in the future and at least 10 working days after publication | BT-131 / BT-1311, publication date | section 5 |
+| Deadline is in the future and at least 10 working days after publication | `sluitingsDatum` from TenderNed `/publicaties/{id}`, publication date | section 5 |
+| Closing date is a real date. `2099-12-31`, a date more than five years after publication, or a missing date gives `unknown` | `sluitingsDatum`, publication date | n/a (`DECISIONS.md`, data findings) |
 | Estimated value, when present, is between EUR 50k and EUR 2M | BT-27 | section 4 (above 2M is flagged "consortium only", not dropped) |
 | Security clearance not required | BT-578 | section 5 |
 | Main nature is services | BT-23 | section 5 (hardware supply) |
+
+The outcome is recorded in `filter_result`, for example `{"deadline": {"outcome": "unknown", "reason": "placeholder_date", "raw": "2099-12-31"}}`. Reasons: `placeholder_date`, `missing`, `no_tenderned_match`. In all three cases `deadline_at` is null.
 
 ### 2.4 Screening (Stage 1)
 
@@ -100,9 +104,9 @@ One call per tender with a small model. Input: redacted notice title, descriptio
 ### 2.5 Deep analysis (Stage 2)
 
 **Extract.**
-- Documents are classified by type. Only the tender guideline (aanbestedingsleidraad), the programme of requirements, and the Nota van Inlichtingen are read in full; annexes, forms and price sheets are indexed for search but not read.
+- Documents are classified by type, by rule first and by model only when no rule matches (2.10). The current version of each `guideline` and `requirements` document is read in full. Every version of a `qa` document is read, oldest first by `datumPublicatie`, because same-named answer files can be separate answers. `notice` documents are never read. Annexes, forms and price sheets are indexed for search but not read.
 - Map: each section of the key documents is sent with the extraction prompt and returns partial results with citations. Reduce: one call merges and de-duplicates into `ExtractionOutput`.
-- The Nota van Inlichtingen is processed last and may override earlier values (a moved deadline, a relaxed requirement). Overrides are recorded.
+- The Nota van Inlichtingen documents are processed last, in date order, and may override earlier values (a moved deadline, a relaxed requirement); a later answer overrides an earlier one. Overrides are recorded.
 - If the key documents exceed the token budget, the tender is marked `needs_review` instead of being truncated silently.
 
 **Match.**
@@ -132,7 +136,47 @@ Per tender. The same agent loop with `get_tender`, `search_tender_docs`, `read_d
 
 ### 2.9 Deployment
 
-One small EU VM, docker compose with three services: `db` (Postgres 16 + pgvector), `app` (Streamlit behind Caddy for HTTPS and basic auth), `worker` (the daily job, started by host cron). Secrets in `.env` on the VM. Nightly `pg_dump` to disk. Raw documents on a mounted volume, not in the repo.
+One small EU VM, docker compose with three services: `db` (Postgres 16 + pgvector), `app` (Streamlit behind Caddy for HTTPS and basic auth), `worker` (the daily job, started by host cron). Secrets in `.env` on the VM. Nightly `pg_dump` to disk. Raw documents on a mounted volume, not in the repo. The `worker` image includes LibreOffice (headless) for legacy DOC conversion.
+
+### 2.10 Document handling
+
+**Formats**
+
+| Format | Extraction | `page_no` means | Notes |
+|---|---|---|---|
+| PDF | Text layer per page | page | No text layer: `scanned` |
+| DOCX | Paragraphs and tables | section index | |
+| DOC (legacy) | Converted to DOCX with LibreOffice headless, then as DOCX | section index | Conversion failure or timeout: `extraction_status = unsupported`. The original file is kept. |
+| PPTX | Text per slide (titles, text boxes, tables) | slide number | |
+| XLSX | Each sheet read as a table | sheet index, with the sheet name in `page_label` | Rows and columns are preserved, `has_table = true`. Chunked in row blocks with the header row repeated. Very large sheets are cut at a cell limit and a warning is recorded. |
+| ZIP | Unpacked recursively | none | Each contained file is its own `documents` row with `parent_document_id` and `archive_path`. The archive row has `extraction_status = archive`. Limits on depth (5), file count and unpacked size; member paths are sanitised, because archives are untrusted input. |
+| Anything else | None | none | `unsupported` |
+
+`Citation.page` holds `page_no` whatever the kind; `documents.page_kind` tells the UI to print "page", "slide", "sheet" or "section". New libraries (`python-pptx`, `openpyxl`) and the LibreOffice binary need approval before they are added.
+
+**Versions**
+
+- Every file in TenderNed's document list is stored. A file is skipped only when its SHA-256 already exists for that tender. The name is never used to de-duplicate.
+- `version_group` is the normalised `documentNaam` (lower case, whitespace collapsed).
+- Within one tender and `version_group`, the file with the newest `datumPublicatie` has `is_current = true`. `datumPublicatie` is a date without a time, so ties are broken by the higher numeric download ID **(confirm that it rises over time)**.
+- Files inside an archive take the archive's `datumPublicatie`.
+- `search_tender_docs` searches current versions plus all `qa` versions. Superseded versions stay in the database for audit.
+
+**Classification by rule, before any model call**
+
+Matching is case-insensitive on the normalised `documentNaam`. Rules are tried in this order and the first match wins.
+
+| Order | Condition | `doc_type` |
+|---|---|---|
+| 1 | `publicatieCategorie.code` is `ANK` (a copy of the notice, such as the EF16 PDFs) | `notice` |
+| 2 | Name contains "Nota van inlichtingen" or "Toelichting beantwoording" | `qa` |
+| 3 | Name contains "Programma van eisen" or "Bijlage 1 - Programma" | `requirements` |
+| 4 | Name contains "Inschrijvingsleidraad" or "Selectieleidraad" | `guideline` |
+
+- A rule match sets `doc_type_source = 'rule'`.
+- Only documents that match no rule go to the model (stage `doc_classify`, through the gateway, with the file name and the redacted first page). Those get `doc_type_source = 'model'`.
+- `notice` documents are stored but never chunked, read or searched, so the extraction eval is not circular (section 6).
+- Archive rows are not classified.
 
 ## 3. Postgres schema
 
@@ -159,16 +203,17 @@ One row per procurement procedure (latest notice version).
 | estimated_value | numeric(14,2), null | often missing |
 | currency | char(3) | |
 | published_at | timestamptz | |
-| deadline_at | timestamptz, null | tenders or requests to participate |
+| deadline_at | timestamptz, null | TenderNed `sluitingsDatum` from `/publicaties/{id}`, read as Europe/Amsterdam time **(confirm)**. Null when missing, unmatched or a placeholder (2.3). Never taken from the notice. |
 | documents_url | text | BT-15 |
 | documents_access | text | `tenderned`, `other_platform`, `login_required`, `none` |
-| tenderned_id | text, null | |
+| tenderned_id | text, null | `publicatieId`, matched at ingest on `pbNummerTed` |
+| tenderned_detail | jsonb, null | raw publication detail, the source of `deadline_at` |
 | is_cancelled | bool | |
 | status | text | see 2.2 |
 | failed_step, error | text, null | |
 | attempts | int | |
 | filter_result | jsonb | per-rule outcome of the hard filter |
-| eforms_gt | jsonb | held-out ground truth (section 6); never shown to a model |
+| eforms_gt | jsonb | held-out ground truth (section 6); never shown to a model. Also keeps the notice deadline (BT-131, BT-1311), for comparison only |
 | raw_notice | jsonb | API response; XML stored on disk |
 | in_snapshot | bool | frozen eval set |
 | updated_at | timestamptz | |
@@ -208,19 +253,28 @@ Indexes: `(tender_id)`, `(purge_after)`.
 | Column | Type | Notes |
 |---|---|---|
 | tender_id | fk tenders, on delete cascade | |
+| tenderned_document_id | text, null | `documentId` (32 hex characters; not the download ID) |
+| parent_document_id | fk documents, null | the archive this file came from |
+| archive_path | text, null | path inside the archive |
 | source_url | text | |
 | filename | text | |
-| sha256 | char(64) | de-duplication |
+| sha256 | char(64) | the only de-duplication key |
 | mime_type | text | |
-| doc_type | text | `guideline`, `requirements`, `qa` (Nota van Inlichtingen), `contract`, `pricing`, `form`, `annex`, `other` |
-| doc_type_source | text | `rule` or `model` |
+| file_format | text | `pdf`, `docx`, `doc`, `pptx`, `xlsx`, `zip`, `other` |
+| page_kind | text, null | `page`, `slide`, `sheet`, `section` |
+| publication_category | text, null | `publicatieCategorie.code` |
+| doc_type | text | `guideline`, `requirements`, `qa` (Nota van Inlichtingen), `notice`, `contract`, `pricing`, `form`, `annex`, `other` |
+| doc_type_source | text, null | `rule` or `model`; null for archives |
+| version_group | text | normalised document name (2.10) |
+| is_current | bool | newest `published_at` in its version group |
 | language | text | `nl`, `en`, `other` |
 | page_count, text_chars | int | |
-| extraction_status | text | `ok`, `scanned`, `unsupported`, `encrypted`, `failed` |
+| extraction_status | text | `ok`, `scanned`, `unsupported` (includes a failed DOC conversion), `encrypted`, `failed`, `archive` |
 | storage_path | text | on the volume |
-| published_at, fetched_at | timestamptz | |
+| published_at | date | from `datumPublicatie` |
+| fetched_at | timestamptz | |
 
-Indexes: unique `(tender_id, sha256)`, `(tender_id, doc_type)`.
+Indexes: unique `(tender_id, sha256)`, `(tender_id, doc_type)`, `(parent_document_id)`, `(tender_id, version_group, published_at desc)`, unique `(tender_id, version_group) where is_current`.
 
 ### document_pages (addition to the requested list)
 Needed for full-document reading and citation verification.
@@ -228,9 +282,10 @@ Needed for full-document reading and citation verification.
 | Column | Type | Notes |
 |---|---|---|
 | document_id | fk documents, on delete cascade | |
-| page_no | int | 1-based; DOCX uses section index and says so |
+| page_no | int | 1-based; a page, slide, sheet or section, per `documents.page_kind` |
+| page_label | text, null | sheet name or slide title |
 | text | text | |
-| has_table | bool | |
+| has_table | bool | always true for sheets |
 
 Indexes: unique `(document_id, page_no)`.
 
@@ -641,13 +696,13 @@ Recommendation rules applied in code after generation:
 
 ## 6. eForms fields used as eval ground truth
 
-BT identifiers are from memory **(confirm)** against the eForms SDK version found in real notices. Ground truth is copied to `tenders.eforms_gt` and the `*_gt` columns on `lots` at ingest, and is never given to the model under test. The notice itself is excluded from the retrieval corpus so that the eval is not circular.
+BT identifiers are from memory **(confirm)** against the eForms SDK version found in real notices. Ground truth is copied to `tenders.eforms_gt` and the `*_gt` columns on `lots` at ingest, and is never given to the model under test. The notice itself is excluded from the retrieval corpus so that the eval is not circular. The submission deadline is the exception: its ground truth is the TenderNed API, not the notice.
 
 ### 6.1 Graded: extraction from document text versus the notice
 
-| Field | eForms | Tolerance and caveats |
+| Field | Source | Tolerance and caveats |
 |---|---|---|
-| Submission deadline | BT-131 (tenders), BT-1311 (requests to participate) | Same calendar date; time within 1 hour. Compare against the latest notice version, since the Q&A round can move it. |
+| Submission deadline | TenderNed `sluitingsDatum` on `/publicaties/{id}` (not eForms) | Same calendar date; time within 1 hour. Use the latest publication, since a rectification can move it. Tenders whose deadline rule is `unknown` are excluded. BT-131 and BT-1311 are kept in `eforms_gt`; the rate at which they disagree with the API is reported, not graded. |
 | Number of lots and lot titles | BT-137, BT-21 at lot level | Count exact; titles by fuzzy match. |
 | Estimated value | BT-27, BT-271 (framework maximum) | Within 1%. Only scored where present. Note VAT ambiguity. |
 | Contract duration | BT-36, BT-536, BT-537 | Within 1 month. |
@@ -676,13 +731,20 @@ Contact point, email and phone (BT-502, BT-506, BT-503). Stored in `contacts` on
 - Retrieval: 30 questions with the page that answers them (page-level, so the labels survive a change of chunking).
 - Memo rubric grades: 10 memos, also used to check the LLM judge.
 
+### 6.5 Data-quality notes
+
+| Date | Finding | Consequence |
+|---|---|---|
+| 13 Nov 2026 | Closing dates in the TenderNed open-data spreadsheet do not match the API. Publication 430496 shows 2026-11-20 in the spreadsheet and 2026-09-11 in the API. | The API field `sluitingsDatum` is the only deadline source for the daily job and the evals. The spreadsheet is used for historical counts only. |
+| 13 Nov 2026 | Some closing dates are placeholders, such as 2099-12-31. | Treated as `unknown` in the hard filter (2.3) and excluded from deadline grading. |
+
 ## 7. Evals mapped to the architecture
 
 | Suite | Tests | Ground truth | Headline metric |
 |---|---|---|---|
 | screening | 2.3 + 2.4 | hand labels | recall at fixed precision; cost per 100 tenders |
 | retrieval | `rag/search.py` | hand-labelled pages | hit@5, MRR; hybrid versus vector-only |
-| extraction | 2.5 extract | eForms (6.1) | accuracy per field, with coverage |
+| extraction | 2.5 extract | eForms and TenderNed `sluitingsDatum` (6.1) | accuracy per field, with coverage |
 | knockout | 2.5 extract + match | hand annotations | requirement recall; match accuracy |
 | memo | 2.5 memo | rubric | judge score, agreement with hand grades, share of verified citations |
 | edge_cases | whole pipeline | expected behaviour | pass or fail per case |
@@ -733,3 +795,9 @@ Model comparison: three providers on screening and on extraction plus matching, 
 | AWS with RDS and EventBridge | One VM, compose, cron | Decision taken |
 | One agent with five tools | Pipeline plus agent loop for matching and chat | Decision taken |
 | (not in plan) | Citation verification, status machine, cost cap, `document_pages`, `get_company_facts`, `read_document_pages` | Gaps found in review |
+| Deadline parsed from eForms | Deadline from TenderNed `sluitingsDatum` | Spreadsheet and API disagree; one source |
+| TenderNed used for documents only | TenderNed detail also fetched at ingest, joined on `pbNummerTed` | The hard filter needs the deadline |
+| PDF and DOCX extraction | Also PPTX, XLSX, legacy DOC, nested ZIP | Formats found in the probe |
+| (not in plan) | Document versions, de-duplication by SHA-256 only | Same name appears several times |
+| (not in plan) | Name rules before the model classifier; `notice` type | Cheaper, and keeps notice copies out of the corpus |
+| (not in plan) | Placeholder closing dates treated as unknown | 2099-12-31 found in the data |

@@ -224,9 +224,8 @@ CONTRACT_NOTICES = {
 }
 
 
-def test_bulk_main_writes_only_redacted_fixtures(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, writes: list
-) -> None:
+def _run_bulk_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, writes: list) -> dict:
+    """Run main() offline on canned responses (real fixtures plus contact blocks)."""
     all_numbers = [*CHANGE_PAIR, *(n for numbers in CONTRACT_NOTICES.values() for n in numbers)]
     injected = {n: inject_contacts(_fixture_text(n))[0] for n in all_numbers}
     responses = {n: (200, "application/xml", text.encode("utf-8")) for n, text in injected.items()}
@@ -240,20 +239,22 @@ def test_bulk_main_writes_only_redacted_fixtures(
     monkeypatch.setattr(
         fetch,
         "find_change_pair",
-        lambda c: (
-            fetch.fetch_notice(c, CHANGE_PAIR[0], "contract_notice"),
-            fetch.fetch_notice(c, CHANGE_PAIR[1], "change_notice"),
-        ),
+        lambda c: (fetch.fetch_notice(c, CHANGE_PAIR[0]), fetch.fetch_notice(c, CHANGE_PAIR[1])),
     )
     monkeypatch.setattr(fetch, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(fetch, "OUT_DIR", tmp_path / "ted")
     writes.clear()
 
     assert fetch.main([]) == 0
+    return json.loads((tmp_path / "ted" / "manifest.json").read_text(encoding="utf-8"))
 
+
+def test_bulk_main_writes_only_redacted_fixtures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, writes: list
+) -> None:
+    manifest = _run_bulk_main(tmp_path, monkeypatch, writes)
     for path, text in writes:
         assert_no_contact_data(text, f"write to {path.name}")
-    manifest = json.loads((tmp_path / "ted" / "manifest.json").read_text(encoding="utf-8"))
     assert len(manifest["notices"]) == 10
     for entry in manifest["notices"]:
         saved = (tmp_path / "ted" / entry["file"]).read_bytes()
@@ -306,3 +307,25 @@ def test_default_client_does_not_wait_before_its_first_request(
     monkeypatch.setattr(fetch, "_OPENER", _FakeOpener())
     fetch.Client().get_xml(NEW_NUMBER)
     assert sleeps == []
+
+
+def test_bulk_main_sets_roles_from_the_parsed_notice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, writes: list
+) -> None:
+    """643806 is found by the CPV-72 search but carries BT-758: it must be a change notice."""
+    manifest = _run_bulk_main(tmp_path, monkeypatch, writes)
+    roles = {e["publication_number"]: e["role"] for e in manifest["notices"]}
+    assert roles == {
+        n: ("change_notice" if n in {"777400-2026", "643806-2026"} else "contract_notice")
+        for n in roles
+    }
+    for entry in manifest["notices"]:
+        assert (entry["role"] == "change_notice") == (entry["changes_notice"] is not None)
+
+
+@pytest.mark.parametrize(
+    ("changed_notice", "role"),
+    [("5280f079-ba46-44e7-b064-7ab4a3bf9e0c-01", "change_notice"), ("", "contract_notice")],
+)
+def test_role_for(changed_notice: str, role: str) -> None:
+    assert fetch.role_for(changed_notice) == role

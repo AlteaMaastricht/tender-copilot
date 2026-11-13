@@ -180,7 +180,13 @@ def parse_notice(number: str, xml: bytes) -> dict[str, str]:
     }
 
 
-def fetch_notice(client: Client, number: str, role: str) -> Notice | None:
+def role_for(changed_notice: str) -> str:
+    """Manifest role from the parsed notice: a notice that changes another (BT-758) is a
+    change notice, whatever search found it. A version-1 notice can still be a change."""
+    return "change_notice" if changed_notice else "contract_notice"
+
+
+def fetch_notice(client: Client, number: str) -> Notice | None:
     status, ctype, body = client.get_xml(number)
     if status != 200 or "xml" not in ctype:
         print(f"  skip {number}: HTTP {status}, {ctype or 'no content type'}")
@@ -190,6 +196,7 @@ def fetch_notice(client: Client, number: str, role: str) -> Notice | None:
     except (ET.ParseError, ValueError) as exc:
         print(f"  skip {number}: {exc}")
         return None
+    role = role_for(info["changed_notice"])
     return Notice(number, body, XML_URL.format(number=number), status, role, **info)
 
 
@@ -223,8 +230,8 @@ def find_change_pair(client: Client) -> tuple[Notice, Notice]:
                 continue
             if not ref.startswith(hit["notice-identifier"]):
                 continue
-            original = fetch_notice(client, hit["publication-number"], "contract_notice")
-            change = fetch_notice(client, other["publication-number"], "change_notice")
+            original = fetch_notice(client, hit["publication-number"])
+            change = fetch_notice(client, other["publication-number"])
             if not original or not change:
                 continue
             same_procedure = original.procedure_id == change.procedure_id == procedure
@@ -333,7 +340,7 @@ def add_notice(
     entry = {
         "publication_number": number,
         "file": f"{number}.xml",
-        "role": "contract_notice",
+        "role": role_for(info["changed_notice"]),  # always contract_notice: changes are refused
         "source_url": XML_URL.format(number=number),
         "http_status": status,
         "sha256": digest,
@@ -402,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
                 number = hit["publication-number"]
                 if number in taken or str(hit.get("notice-version", "1")).lstrip("0") != "1":
                     continue
-                notice = fetch_notice(client, number, "contract_notice")
+                notice = fetch_notice(client, number)
                 if not notice:
                     continue
                 if not notice.main_cpv.startswith(prefix):

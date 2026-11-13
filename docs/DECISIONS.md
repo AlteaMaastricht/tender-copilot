@@ -79,6 +79,28 @@ Never record credentials here. Keep evidence (emails, screenshots, terms pages) 
 | 13 Nov 2026 | Some closing dates are placeholders (for example 2099-12-31). | Treat as `unknown` in the hard filter. |
 | 13 Nov 2026 | Document formats include PDF, XLSX, PPTX, legacy DOC and nested ZIP. | Extend extraction and record unsupported formats. |
 | 13 Nov 2026 | The same document name appears several times, for example several EF16 copies and several Q&A answers. | Keep every version. Mark the newest by `datumPublicatie`. |
+| 13 Nov 2026 | Deadline check on 10 snapshot publications: 8 matched. The 2 mismatches go in opposite directions: 409819 spreadsheet 2026-03-09, API 2026-03-20; 408259 spreadsheet 2026-03-06, API 2026-04-28. Earlier example 430496 also went the other way (API earlier). | The spreadsheet closing date is not reliable in either direction. Evaluation labels use the API `sluitingsDatum`. The cause of the 2 mismatches is not yet confirmed; check `publicatieIDLaatsteRectificatie` on both before explaining them. |
+
+## Evaluation snapshot (13 Nov 2026)
+
+| Item | Value | Status |
+|---|---|---|
+| Candidate pool | 589 TenderNed-hosted candidates from the open-data database: CPV 72 (220), CPV 79 (293), CPV 48 (76). Not committed. | Done |
+| Selection | 150 publications: 50 CPV 72, 30 CPV 48, 70 CPV 79 | Done |
+| Seed | `20261113` | Done |
+| Sampling | Within each CPV group, round-robin across 2026 publication months. The seed decides which months receive the remainder. | Done |
+| Output | `data/snapshot_selection.csv` holds all 589 candidates with a `selected` column. `data/snapshot_candidates.csv` is the same table without `selected` (redundant). `data/snapshot_candidates_raw.psv` is the original sqlite output, git-ignored. | Done |
+| Placeholder closing dates | 1 row has 2099-12-31, flagged `closing_placeholder = true`, not selected. 6 candidates have an empty closing date; 1 of them (431048) is selected. Its deadline must come from the API. | Open |
+| Reproducibility | The selection script is in a scratch folder outside the repo. Commit it as `scripts/snapshot_select.py` before citing the snapshot. | Open: needs approval to commit |
+| Deadline check | `data/snapshot_deadline_check.csv`: 10 publications checked against the detail endpoint. 8 matched. The check made 11 detail requests (one extra, for 430496, to confirm the field name). No documents downloaded. | Done. Full check of all 150 pending decision. |
+
+Monthly counts (2026):
+
+| CPV group | Total | Jan | Feb | Mar | Apr | May | Jun |
+|---|---|---|---|---|---|---|---|
+| 72 | 50 | 9 | 8 | 8 | 8 | 8 | 9 |
+| 48 | 30 | 5 | 5 | 5 | 5 | 5 | 5 |
+| 79 | 70 | 12 | 12 | 11 | 11 | 12 | 12 |
 
 ---
 
@@ -87,6 +109,7 @@ Never record credentials here. Keep evidence (emails, screenshots, terms pages) 
 | Date | Reviewer | Change |
 |---|---|---|
 | 13 Nov 2026 | Arthur | Initial log created. Scope decisions S1–S6 recorded. |
+| 13 Nov 2026 | Arthur | Snapshot selection recorded: seed 20261113, mix 50/30/70, deadline-check result. Data finding on spreadsheet closing dates added. |
 
 ---
 

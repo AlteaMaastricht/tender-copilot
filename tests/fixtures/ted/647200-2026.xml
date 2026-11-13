@@ -1,0 +1,369 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><ContractNotice xmlns="urn:oasis:names:specification:ubl:schema:xsd:ContractNotice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:efac="http://data.europa.eu/p27/eforms-ubl-extension-aggregate-components/1" xmlns:efbc="http://data.europa.eu/p27/eforms-ubl-extension-basic-components/1" xmlns:efext="http://data.europa.eu/p27/eforms-ubl-extensions/1" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2">
+    <ext:UBLExtensions>
+        <ext:UBLExtension>
+            <ext:ExtensionContent>
+                <efext:EformsExtension>
+                    <efac:NoticeSubType>
+                        <cbc:SubTypeCode listName="notice-subtype">16</cbc:SubTypeCode>
+                    </efac:NoticeSubType>
+                    <efac:Organizations>
+                        <efac:Organization>
+                            <efac:Company>
+                                <cbc:WebsiteURI>http://www.vrk.nl</cbc:WebsiteURI>
+                                <cac:PartyIdentification>
+                                    <cbc:ID schemeName="organization">ORG-0001</cbc:ID>
+                                </cac:PartyIdentification>
+                                <cac:PartyName>
+                                    <cbc:Name languageID="NLD">Veiligheidsregio Kennemerland</cbc:Name>
+                                </cac:PartyName>
+                                <cac:PostalAddress>
+                                    <cbc:StreetName>Zijlweg 200</cbc:StreetName>
+                                    <cbc:CityName>HAARLEM</cbc:CityName>
+                                    <cbc:PostalZone>2015CK</cbc:PostalZone>
+                                    <cbc:CountrySubentityCode listName="nuts">NL32A</cbc:CountrySubentityCode>
+                                    <cac:Country>
+                                        <cbc:IdentificationCode listName="country">NLD</cbc:IdentificationCode>
+                                    </cac:Country>
+                                </cac:PostalAddress>
+                                <cac:PartyLegalEntity>
+                                    <cbc:CompanyID>6236577</cbc:CompanyID>
+                                </cac:PartyLegalEntity>
+                                
+                            </efac:Company>
+                            <efac:TouchPoint>
+                                <cbc:WebsiteURI>http://www.rechtspraak.nl</cbc:WebsiteURI>
+                                <cac:PartyIdentification>
+                                    <cbc:ID schemeName="touchpoint">TPO-0003</cbc:ID>
+                                </cac:PartyIdentification>
+                                <cac:PartyName>
+                                    <cbc:Name languageID="NLD">Rechtbank Noord-Holland</cbc:Name>
+                                </cac:PartyName>
+                                <cac:PostalAddress>
+                                    <cbc:StreetName>Simon de Vrieshof 1</cbc:StreetName>
+                                    <cbc:CityName>Haarlem</cbc:CityName>
+                                    <cbc:PostalZone>2019 HA</cbc:PostalZone>
+                                    <cbc:CountrySubentityCode listName="nuts">NL32A</cbc:CountrySubentityCode>
+                                    <cac:Country>
+                                        <cbc:IdentificationCode listName="country">NLD</cbc:IdentificationCode>
+                                    </cac:Country>
+                                </cac:PostalAddress>
+                                
+                            </efac:TouchPoint>
+                            <efac:TouchPoint>
+                                <cbc:WebsiteURI>http://www.rechtspraak.nl</cbc:WebsiteURI>
+                                <cac:PartyIdentification>
+                                    <cbc:ID schemeName="touchpoint">TPO-0001</cbc:ID>
+                                </cac:PartyIdentification>
+                                <cac:PartyName>
+                                    <cbc:Name languageID="NLD">Rechtbank Noord-Holland</cbc:Name>
+                                </cac:PartyName>
+                                <cac:PostalAddress>
+                                    <cbc:StreetName>Simon de Vrieshof 1</cbc:StreetName>
+                                    <cbc:CityName>Haarlem</cbc:CityName>
+                                    <cbc:PostalZone>2019 HA</cbc:PostalZone>
+                                    <cbc:CountrySubentityCode listName="nuts">NL32A</cbc:CountrySubentityCode>
+                                    <cac:Country>
+                                        <cbc:IdentificationCode listName="country">NLD</cbc:IdentificationCode>
+                                    </cac:Country>
+                                </cac:PostalAddress>
+                                
+                            </efac:TouchPoint>
+                            <efac:TouchPoint>
+                                <cbc:WebsiteURI>http://www.rechtspraak.nl</cbc:WebsiteURI>
+                                <cac:PartyIdentification>
+                                    <cbc:ID schemeName="touchpoint">TPO-0002</cbc:ID>
+                                </cac:PartyIdentification>
+                                <cac:PartyName>
+                                    <cbc:Name languageID="NLD">Rechtbank Noord-Holland</cbc:Name>
+                                </cac:PartyName>
+                                <cac:PostalAddress>
+                                    <cbc:StreetName>Simon de Vrieshof 1</cbc:StreetName>
+                                    <cbc:CityName>Haarlem</cbc:CityName>
+                                    <cbc:PostalZone>2019 HA</cbc:PostalZone>
+                                    <cbc:CountrySubentityCode listName="nuts">NL32A</cbc:CountrySubentityCode>
+                                    <cac:Country>
+                                        <cbc:IdentificationCode listName="country">NLD</cbc:IdentificationCode>
+                                    </cac:Country>
+                                </cac:PostalAddress>
+                                
+                            </efac:TouchPoint>
+                        </efac:Organization>
+                    </efac:Organizations>
+                <efac:Publication><efbc:NoticePublicationID schemeName="ojs-notice-id">00647200-2026</efbc:NoticePublicationID><efbc:GazetteID schemeName="ojs-id">182/2026</efbc:GazetteID><efbc:PublicationDate>2026-09-21+02:00</efbc:PublicationDate></efac:Publication></efext:EformsExtension>
+            </ext:ExtensionContent>
+        </ext:UBLExtension>
+    </ext:UBLExtensions>
+    <cbc:UBLVersionID>2.3</cbc:UBLVersionID>
+    <cbc:CustomizationID>eforms-sdk-1.13</cbc:CustomizationID>
+    <cbc:ID schemeName="notice-id">49f9b74e-7f58-420d-bf13-9b2fe3d21dec</cbc:ID>
+    <cbc:ContractFolderID>717efaa4-0245-4676-af55-147122ad1037</cbc:ContractFolderID>
+    <cbc:IssueDate>2026-09-17+02:00</cbc:IssueDate>
+    <cbc:IssueTime>15:34:22.633622031+02:00</cbc:IssueTime>
+    <cbc:VersionID>01</cbc:VersionID>
+    <cbc:RegulatoryDomain>32014L0024</cbc:RegulatoryDomain>
+    <cbc:NoticeTypeCode listName="competition">cn-standard</cbc:NoticeTypeCode>
+    <cbc:NoticeLanguageCode listName="language">NLD</cbc:NoticeLanguageCode>
+    <cac:ContractingParty>
+        <cbc:BuyerProfileURI>http://www.vrk.nl</cbc:BuyerProfileURI>
+        <cac:ContractingPartyType>
+            <cbc:PartyTypeCode listName="buyer-legal-type">body-pl</cbc:PartyTypeCode>
+        </cac:ContractingPartyType>
+        <cac:ContractingActivity>
+            <cbc:ActivityTypeCode listName="authority-activity">pub-os</cbc:ActivityTypeCode>
+        </cac:ContractingActivity>
+        <cac:Party>
+            <cac:PartyIdentification>
+                <cbc:ID schemeName="organization">ORG-0001</cbc:ID>
+            </cac:PartyIdentification>
+        </cac:Party>
+    </cac:ContractingParty>
+    <cac:TenderingTerms>
+        <cac:TendererQualificationRequest>
+            <cac:SpecificTendererRequirement>
+                <cbc:TendererRequirementTypeCode languageID="NLD" listName="exclusion-grounds-source">epo-sub-espd</cbc:TendererRequirementTypeCode>
+            </cac:SpecificTendererRequirement>
+        </cac:TendererQualificationRequest>
+    </cac:TenderingTerms>
+    <cac:TenderingProcess>
+        <cbc:Description languageID="NLD">De Aanbestedende dienst heeft gekozen voor de openbare procedure. De keuze voor de openbare procedure is gebaseerd op het feit dat er relatief weinig aanbieders zijn en de Aanbestedende dienst de administratieve last zoveel mogelijk wenst te beperken voor marktpartijen en de eigen organisatie. 
+
+In de openbare procedure kiest de Aanbestedende dienst in één ronde zowel de Opdrachtnemer als het product of de dienst. Dit doet Opdrachtnemer door het hanteren van Uitsluitingsgronden, Geschiktheidseisen en Subgunningscriteria. De Uitsluitingsgronden en Geschiktheidseisen vindt u terug in hoofdstuk 5 van het beschrijvend document. De subgunningscriteria vindt u in hoofdstuk 4 van het beschrijvend document.</cbc:Description>
+        <cbc:ProcedureCode languageID="NLD" listName="procurement-procedure-type">open</cbc:ProcedureCode>
+        <cac:ProcessJustification>
+            <cbc:ProcessReasonCode listName="accelerated-procedure">false</cbc:ProcessReasonCode>
+        </cac:ProcessJustification>
+    </cac:TenderingProcess>
+    <cac:ProcurementProject>
+        <cbc:Name languageID="NLD">Herstel van de digitale informatiehuishouding</cbc:Name>
+        <cbc:Description languageID="NLD">Binnen de Veiligheidsregio Kennemerland (VRK) ontbreekt momenteel een actueel en integraal overzicht van de papieren en digitale informatiehuishouding. Papieren en digitale Informatieobjecten zijn verspreid en soms met meerdere kopieën opgeslagen over verschillende bronnen, waaronder kasten, netwerkschijven, cloudopslag, lokale omgevingen en e-mail. Een aanzienlijk deel van deze informatie bestaat uit ongestructureerde bestanden die in de loop van de tijd zijn ontstaan en door verschillende VRK onderdelen worden gebruikt en beheerd. 
+
+De aanbesteding heeft betrekking op de bestaande informatiehuishouding van VRK. De opdracht omvat het analyseren, beoordelen, opschonen, structureren, Plotten en migratiegereed maken van bestaande Informatieobjecten conform het door VRK vastgestelde Verwerkingskader. De VRK zal daarbij de locatie van de bestaande Informatieobjecten aanleveren aan de Opdrachtnemer. Het doel is om een aantoonbaar compliant, geordende en toekomstbestendige informatieomgeving Het hieronder genoemde bedrag is niet representatief voor de opdracht. Het bedrag is hier uitsluitend opgenomen om het mogelijk te maken de opdracht te publiceren op TenderNed. 
+De geraamde waarde van de Opdracht is door de aard van de Opdracht niet exact te bepalen in termen van bedragen. De omvang in hoeveelheid Informatieobjecten is gegeven in paragraaf 2.2. Hierbij moet worden opgemerkt dat na een eerste inventarisatie kan blijken dat een deel van deze hoeveelheid mogelijk niet in aanmerking komt voor verdere verwerking, bijvoorbeeld door de leeftijd van deze Informatieobjecten.
+
+Aan deze opgave kunnen geen rechten ontleend worden. Met het oog op politieke, economische, budgettaire, organisatorische en/of bestuurlijke ontwikkelingen en de hiermee samenhangende groei en krimp van de Aanbestedende dienst is het mogelijk dat de Opdracht kan uitbreiden, krimpen of wijzigen. Deze ontwikkelingen kunnen van invloed zijn op de omvang van de Opdracht. Inschrijvers dienen hiermee rekening te houden.</cbc:Description>
+        <cbc:ProcurementTypeCode listName="contract-nature">services</cbc:ProcurementTypeCode>
+        <cac:RequestedTenderTotal>
+            <cbc:EstimatedOverallContractAmount currencyID="EUR">250000.0</cbc:EstimatedOverallContractAmount>
+        </cac:RequestedTenderTotal>
+        <cac:MainCommodityClassification>
+            <cbc:ItemClassificationCode listName="cpv">72300000</cbc:ItemClassificationCode>
+        </cac:MainCommodityClassification>
+        <cac:AdditionalCommodityClassification>
+            <cbc:ItemClassificationCode listName="cpv">72512000</cbc:ItemClassificationCode>
+        </cac:AdditionalCommodityClassification>
+        <cac:AdditionalCommodityClassification>
+            <cbc:ItemClassificationCode listName="cpv">79995100</cbc:ItemClassificationCode>
+        </cac:AdditionalCommodityClassification>
+        <cac:RealizedLocation>
+            <cbc:Description languageID="NLD">Haarlem</cbc:Description>
+            <cac:Address>
+                <cbc:CountrySubentityCode listName="nuts">NL32A</cbc:CountrySubentityCode>
+                <cac:Country>
+                    <cbc:IdentificationCode listName="country">NLD</cbc:IdentificationCode>
+                </cac:Country>
+            </cac:Address>
+        </cac:RealizedLocation>
+    </cac:ProcurementProject>
+    <cac:ProcurementProjectLot>
+        <cbc:ID schemeName="Lot">LOT-0000</cbc:ID>
+        <cac:TenderingTerms>
+            <cbc:VariantConstraintCode listName="permission">not-allowed</cbc:VariantConstraintCode>
+            <cbc:FundingProgramCode languageID="NLD" listName="eu-funded">no-eu-funds</cbc:FundingProgramCode>
+            <cbc:RequiredCurriculaCode listName="requirement-stage">not-requ</cbc:RequiredCurriculaCode>
+            <cbc:RecurringProcurementIndicator>false</cbc:RecurringProcurementIndicator>
+            <cac:RequiredFinancialGuarantee>
+                <cbc:GuaranteeTypeCode listName="tender-guarantee-required">false</cbc:GuaranteeTypeCode>
+            </cac:RequiredFinancialGuarantee>
+            <cac:CallForTendersDocumentReference>
+                <cbc:ID>documentsId</cbc:ID>
+                <cbc:DocumentType>non-restricted-document</cbc:DocumentType>
+                <cac:Attachment>
+                    <cac:ExternalReference>
+                        <cbc:URI>https://www.tenderned.nl/aankondigingen/overzicht/440489</cbc:URI>
+                    </cac:ExternalReference>
+                </cac:Attachment>
+            </cac:CallForTendersDocumentReference>
+            <cac:TendererQualificationRequest>
+                <cac:SpecificTendererRequirement>
+                    <cbc:TendererRequirementTypeCode listName="reserved-procurement">none</cbc:TendererRequirementTypeCode>
+                </cac:SpecificTendererRequirement>
+            </cac:TendererQualificationRequest>
+            <cac:TendererQualificationRequest>
+                <cbc:CompanyLegalFormCode listName="required">false</cbc:CompanyLegalFormCode>
+            </cac:TendererQualificationRequest>
+            <cac:TendererQualificationRequest>
+                <cac:SpecificTendererRequirement>
+                    <cbc:TendererRequirementTypeCode languageID="NLD" listName="selection-criteria-source">epo-sub-espd</cbc:TendererRequirementTypeCode>
+                </cac:SpecificTendererRequirement>
+            </cac:TendererQualificationRequest>
+            <cac:ContractExecutionRequirement>
+                <cbc:ExecutionRequirementCode listName="fsr">false</cbc:ExecutionRequirementCode>
+            </cac:ContractExecutionRequirement>
+            <cac:ContractExecutionRequirement>
+                <cbc:ExecutionRequirementCode listName="conditions">performance</cbc:ExecutionRequirementCode>
+                <cbc:Description languageID="NLD">Alle door u aangeboden informatie en documentatie wordt eigendom van de Aanbestedende dienst. De Aanbestedende dienst zal alle verkregen informatie uit deze procedure vertrouwelijk behandelen en niet gebruiken voor andere doeleinden dan beschreven, tenzij u anders vermeldt.
+
+Door het indienen van een Inschrijving verklaart u vertrouwelijk om te gaan met alle informatie die in het kader van deze aanbesteding wordt verkregen. Het is niet toegestaan informatie aan derden beschikbaar te stellen, behalve aan door u in te schakelen partners, onderaannemers en hulppersonen. U blijft echter wel verantwoordelijk voor het nakomen van de geheimhoudingsplicht.</cbc:Description>
+            </cac:ContractExecutionRequirement>
+            <cac:ContractExecutionRequirement>
+                <cbc:ExecutionRequirementCode languageID="NLD" listName="reserved-execution">no</cbc:ExecutionRequirementCode>
+            </cac:ContractExecutionRequirement>
+            <cac:ContractExecutionRequirement>
+                <cbc:ExecutionRequirementCode listName="einvoicing">required</cbc:ExecutionRequirementCode>
+            </cac:ContractExecutionRequirement>
+            <cac:ContractExecutionRequirement>
+                <cbc:ExecutionRequirementCode listName="esignature-submission">false</cbc:ExecutionRequirementCode>
+            </cac:ContractExecutionRequirement>
+            <cac:ContractExecutionRequirement>
+                <cbc:ExecutionRequirementCode listName="ecatalog-submission">not-allowed</cbc:ExecutionRequirementCode>
+            </cac:ContractExecutionRequirement>
+            <cac:AwardingTerms>
+                <cac:AwardingCriterion>
+                    <cac:SubordinateAwardingCriterion>
+                        <ext:UBLExtensions>
+                            <ext:UBLExtension>
+                                <ext:ExtensionContent>
+                                    <efext:EformsExtension>
+                                        <efac:AwardCriterionParameter>
+                                            <efbc:ParameterCode listName="number-weight">poi-exa</efbc:ParameterCode>
+                                            <efbc:ParameterNumeric>20</efbc:ParameterNumeric>
+                                        </efac:AwardCriterionParameter>
+                                    </efext:EformsExtension>
+                                </ext:ExtensionContent>
+                            </ext:UBLExtension>
+                        </ext:UBLExtensions>
+                        <cbc:AwardingCriterionTypeCode languageID="NLD" listName="award-criterion-type">price</cbc:AwardingCriterionTypeCode>
+                        <cbc:Name languageID="NLD">Prijs</cbc:Name>
+                        <cbc:Description languageID="NLD">Zie beschrijvend document</cbc:Description>
+                    </cac:SubordinateAwardingCriterion>
+                    <cac:SubordinateAwardingCriterion>
+                        <ext:UBLExtensions>
+                            <ext:UBLExtension>
+                                <ext:ExtensionContent>
+                                    <efext:EformsExtension>
+                                        <efac:AwardCriterionParameter>
+                                            <efbc:ParameterCode listName="number-weight">poi-exa</efbc:ParameterCode>
+                                            <efbc:ParameterNumeric>80</efbc:ParameterNumeric>
+                                        </efac:AwardCriterionParameter>
+                                    </efext:EformsExtension>
+                                </ext:ExtensionContent>
+                            </ext:UBLExtension>
+                        </ext:UBLExtensions>
+                        <cbc:AwardingCriterionTypeCode languageID="NLD" listName="award-criterion-type">quality</cbc:AwardingCriterionTypeCode>
+                        <cbc:Name languageID="NLD">Kwaliteit</cbc:Name>
+                        <cbc:Description languageID="NLD">Zie beschrijvend document</cbc:Description>
+                    </cac:SubordinateAwardingCriterion>
+                </cac:AwardingCriterion>
+            </cac:AwardingTerms>
+            <cac:AdditionalInformationParty>
+                <cac:PartyIdentification>
+                    <cbc:ID>ORG-0001</cbc:ID>
+                </cac:PartyIdentification>
+            </cac:AdditionalInformationParty>
+            <cac:TenderRecipientParty>
+                <cbc:EndpointID>https://www.tenderned.nl/aankondigingen/overzicht/440489</cbc:EndpointID>
+                <cac:PartyIdentification>
+                    <cbc:ID>ORG-0001</cbc:ID>
+                </cac:PartyIdentification>
+            </cac:TenderRecipientParty>
+            <cac:TenderValidityPeriod>
+                <cbc:DurationMeasure unitCode="MONTH">3</cbc:DurationMeasure>
+            </cac:TenderValidityPeriod>
+            <cac:AppealTerms>
+                <cac:AppealInformationParty>
+                    <cac:PartyIdentification>
+                        <cbc:ID>TPO-0002</cbc:ID>
+                    </cac:PartyIdentification>
+                </cac:AppealInformationParty>
+                <cac:AppealReceiverParty>
+                    <cac:PartyIdentification>
+                        <cbc:ID>TPO-0003</cbc:ID>
+                    </cac:PartyIdentification>
+                </cac:AppealReceiverParty>
+                <cac:MediationParty>
+                    <cac:PartyIdentification>
+                        <cbc:ID>TPO-0001</cbc:ID>
+                    </cac:PartyIdentification>
+                </cac:MediationParty>
+            </cac:AppealTerms>
+            <cac:Language>
+                <cbc:ID>NLD</cbc:ID>
+            </cac:Language>
+            <cac:PostAwardProcess>
+                <cbc:ElectronicOrderUsageIndicator>false</cbc:ElectronicOrderUsageIndicator>
+                <cbc:ElectronicPaymentUsageIndicator>true</cbc:ElectronicPaymentUsageIndicator>
+            </cac:PostAwardProcess>
+            <cac:SecurityClearanceTerm>
+                <cbc:Code listName="required">false</cbc:Code>
+            </cac:SecurityClearanceTerm>
+        </cac:TenderingTerms>
+        <cac:TenderingProcess>
+            <cbc:SubmissionMethodCode listName="esubmission">required</cbc:SubmissionMethodCode>
+            <cbc:GovernmentAgreementConstraintIndicator>true</cbc:GovernmentAgreementConstraintIndicator>
+            <cac:TenderSubmissionDeadlinePeriod>
+                <cbc:EndDate>2026-11-30+01:00</cbc:EndDate>
+                <cbc:EndTime>10:00:00+01:00</cbc:EndTime>
+            </cac:TenderSubmissionDeadlinePeriod>
+            <cac:AdditionalInformationRequestPeriod>
+                <cbc:EndDate>2026-10-22+02:00</cbc:EndDate>
+                <cbc:EndTime>10:00:00+02:00</cbc:EndTime>
+            </cac:AdditionalInformationRequestPeriod>
+            <cac:OpenTenderEvent>
+                <cbc:OccurrenceDate>2026-11-30+01:00</cbc:OccurrenceDate>
+                <cbc:OccurrenceTime>10:01:00+01:00</cbc:OccurrenceTime>
+            </cac:OpenTenderEvent>
+            <cac:AuctionTerms>
+                <cbc:AuctionConstraintIndicator>false</cbc:AuctionConstraintIndicator>
+            </cac:AuctionTerms>
+            <cac:ContractingSystem>
+                <cbc:ContractingSystemTypeCode listName="framework-agreement">none</cbc:ContractingSystemTypeCode>
+            </cac:ContractingSystem>
+            <cac:ContractingSystem>
+                <cbc:ContractingSystemTypeCode listName="dps-usage">none</cbc:ContractingSystemTypeCode>
+            </cac:ContractingSystem>
+        </cac:TenderingProcess>
+        <cac:ProcurementProject>
+            <cbc:ID schemeName="InternalID">1</cbc:ID>
+            <cbc:Name languageID="NLD">Herstel van de digitale informatiehuishouding</cbc:Name>
+            <cbc:Description languageID="NLD">Binnen de Veiligheidsregio Kennemerland (VRK) ontbreekt momenteel een actueel en integraal overzicht van de papieren en digitale informatiehuishouding. Papieren en digitale Informatieobjecten zijn verspreid en soms met meerdere kopieën opgeslagen over verschillende bronnen, waaronder kasten, netwerkschijven, cloudopslag, lokale omgevingen en e-mail. Een aanzienlijk deel van deze informatie bestaat uit ongestructureerde bestanden die in de loop van de tijd zijn ontstaan en door verschillende VRK onderdelen worden gebruikt en beheerd. 
+
+De aanbesteding heeft betrekking op de bestaande informatiehuishouding van VRK. De opdracht omvat het analyseren, beoordelen, opschonen, structureren, Plotten en migratiegereed maken van bestaande Informatieobjecten conform het door VRK vastgestelde Verwerkingskader. De VRK zal daarbij de locatie van de bestaande Informatieobjecten aanleveren aan de Opdrachtnemer. Het doel is om een aantoonbaar compliant, geordende en toekomstbestendige informatieomgeving De geraamde waarde van de Opdracht is door de aard van de Opdracht niet exact te bepalen in termen van bedragen. De omvang in hoeveelheid Informatieobjecten is gegeven in paragraaf 2.2. Hierbij moet worden opgemerkt dat na een eerste inventarisatie kan blijken dat een deel van deze hoeveelheid mogelijk niet in aanmerking komt voor verdere verwerking, bijvoorbeeld door de leeftijd van deze Informatieobjecten.
+
+Aan deze opgave kunnen geen rechten ontleend worden. Met het oog op politieke, economische, budgettaire, organisatorische en/of bestuurlijke ontwikkelingen en de hiermee samenhangende groei en krimp van de Aanbestedende dienst is het mogelijk dat de Opdracht kan uitbreiden, krimpen of wijzigen. Deze ontwikkelingen kunnen van invloed zijn op de omvang van de Opdracht. Inschrijvers dienen hiermee rekening te houden.</cbc:Description>
+            <cbc:ProcurementTypeCode listName="contract-nature">services</cbc:ProcurementTypeCode>
+            <cac:ProcurementAdditionalType>
+                <cbc:ProcurementTypeCode listName="strategic-procurement">soc-obj</cbc:ProcurementTypeCode>
+                <cbc:ProcurementType languageID="NLD">De achterliggende doelstelling van dit criterium is dat de uitvoering van de Opdracht aantoonbaar bijdraagt aan de arbeidsdeelname, ontwikkeling en maatschappelijke betrokkenheid van mensen met een afstand tot de arbeidsmarkt. 
+De doelstelling is behaald wanneer:
+A)	Minimaal 10% van de productieve uren binnen de Opdracht wordt uitgevoerd door personen uit de SROI-doelgroep;
+B)	Deze personen werkzaamheden uitvoeren die passen bij hun mogelijkheden en bijdragen aan de uitvoering van de Opdracht;
+C)	Zij passende begeleiding en ontwikkelmogelijkheden ontvangen, waardoor zij kennis, vaardigheden en werkervaring opdoen, waardering en voldoening ervaren door hun bijdrage aan de Opdracht en deelname aan het arbeidsproces, en waar mogelijk hun positie op de arbeidsmarkt versterken; 
+D)	De inzet plaatsvindt met behoud van de kwaliteit, planning, continuïteit, privacy en informatiebeveiliging.
+
+Onder productieve uren worden alle uren verstaan die rechtstreeks worden besteed aan het inventariseren, structureren, beoordelen, classificeren, controleren en verrijken van informatie. Algemene overhead, acquisitie en contractmanagement worden niet meegerekend.</cbc:ProcurementType>
+            </cac:ProcurementAdditionalType>
+            <cac:MainCommodityClassification>
+                <cbc:ItemClassificationCode listName="cpv">72300000</cbc:ItemClassificationCode>
+            </cac:MainCommodityClassification>
+            <cac:AdditionalCommodityClassification>
+                <cbc:ItemClassificationCode listName="cpv">72512000</cbc:ItemClassificationCode>
+            </cac:AdditionalCommodityClassification>
+            <cac:AdditionalCommodityClassification>
+                <cbc:ItemClassificationCode listName="cpv">79995100</cbc:ItemClassificationCode>
+            </cac:AdditionalCommodityClassification>
+            <cac:RealizedLocation>
+                <cbc:Description languageID="NLD">Haarlem</cbc:Description>
+                <cac:Address>
+                    <cbc:CountrySubentityCode listName="nuts">NL32A</cbc:CountrySubentityCode>
+                    <cac:Country>
+                        <cbc:IdentificationCode listName="country">NLD</cbc:IdentificationCode>
+                    </cac:Country>
+                </cac:Address>
+            </cac:RealizedLocation>
+            <cac:PlannedPeriod>
+                <cbc:StartDate>2027-01-01+01:00</cbc:StartDate>
+                <cbc:EndDate>2028-12-31+01:00</cbc:EndDate>
+            </cac:PlannedPeriod>
+        </cac:ProcurementProject>
+    </cac:ProcurementProjectLot>
+</ContractNotice>

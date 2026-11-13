@@ -2,6 +2,9 @@
 
 Usage:
     python scripts/fetch_ted_fixtures.py [--force]
+    python scripts/fetch_ted_fixtures.py --add 688608-2026 --min-lots 2
+
+--add makes exactly one request, after a 2 s wait, and adds one notice to the existing set.
 
 Writes to tests/fixtures/ted/:
   - 9 Dutch contract notices (main CPV 72: 4, 79: 3, 48: 2), published in the 8-week window
@@ -48,6 +51,7 @@ WINDOW = "(20260918 <> 20261113)"  # 8 weeks up to 13 November 2026
 QUOTAS = {"72": 4, "79": 3, "48": 2}  # contract notices, including the change pair's original
 NOT_FOUND = ("99999999-2026", "99999998-2026")
 DELAY_SECONDS = 1.0
+ADD_DELAY_SECONDS = 2.0  # --add mode: one request, preceded by this wait
 MAX_REQUESTS = 60
 SEARCH_FIELDS = [
     "publication-number",
@@ -85,13 +89,19 @@ _OPENER = urllib.request.build_opener(_NoRedirect)
 class Client:
     requests: int = 0
     _last: float = 0.0
+    delay: float = DELAY_SECONDS
+    wait_first: bool = False  # also wait `delay` before the very first request
+
+    def __post_init__(self) -> None:
+        if self.wait_first:
+            self._last = time.monotonic()
 
     def _send(self, req: urllib.request.Request) -> tuple[int, str, bytes]:
         if not req.full_url.startswith(ALLOWED_PREFIXES):
             raise Stop(f"refusing to contact {req.full_url}")
         if self.requests >= MAX_REQUESTS:
             raise Stop(f"request budget of {MAX_REQUESTS} reached")
-        wait = DELAY_SECONDS - (time.monotonic() - self._last)
+        wait = self.delay - (time.monotonic() - self._last)
         if wait > 0:
             time.sleep(wait)
         self._last = time.monotonic()
@@ -267,10 +277,102 @@ def write_bytes(path: Path, data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+PUBLICATION_NUMBER_RE = re.compile(r"\d+-\d{4}")
+
+
+def count_lots(xml: bytes) -> int:
+    return len(ET.fromstring(xml).findall("cac:ProcurementProjectLot", NS))
+
+
+def read_publication_date(xml: bytes) -> str | None:
+    """OPP-012 (confirm), e.g. `2026-10-06+02:00`: the form the manifest already uses."""
+    node = ET.fromstring(xml).find(".//efbc:PublicationDate", NS)
+    return (node.text or "").strip() or None if node is not None else None
+
+
+def add_notice(
+    client: Client, number: str, out_dir: Path | None = None, min_lots: int = 1
+) -> tuple[dict[str, Any], int]:
+    """Fetch ONE notice (one request), redact it, save it and record it in the manifest.
+
+    Stops with nothing written if the notice breaks a rule below or cannot be redacted.
+    Returns (manifest entry, lot count). `client` only needs a `get_xml(number)` method.
+    """
+    out_dir = OUT_DIR if out_dir is None else out_dir
+    if not PUBLICATION_NUMBER_RE.fullmatch(number):
+        raise Stop(f"not a publication number: {number!r}")
+    manifest_path = out_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise Stop(f"{manifest_path.name} not found; run the full fetch first")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    xml_path = out_dir / f"{number}.xml"
+    if xml_path.exists() or any(n["publication_number"] == number for n in manifest["notices"]):
+        raise Stop(f"{number} is already a fixture")
+
+    status, ctype, body = client.get_xml(number)
+    if status != 200 or "xml" not in ctype:
+        raise Stop(f"{number}: HTTP {status}, {ctype or 'no content type'}")
+    try:
+        info = parse_notice(number, body)
+    except (ET.ParseError, ValueError) as exc:
+        raise Stop(f"{number}: {exc}") from None
+    group = info["main_cpv"][:2]
+    if info["notice_type"] != "cn-standard":
+        raise Stop(f"{number}: notice type {info['notice_type']!r}, expected cn-standard")
+    if group not in QUOTAS:
+        raise Stop(f"{number}: main CPV {info['main_cpv']!r} is not in groups {sorted(QUOTAS)}")
+    if info["changed_notice"]:
+        raise Stop(f"{number} is a change notice (BT-758), not a contract notice")
+    lots = count_lots(body)
+    if lots < min_lots:
+        raise Stop(f"{number}: {lots} lot(s), expected at least {min_lots}")
+
+    # Privacy (CLAUDE.md): redact before anything is written; raises Stop if contact data remains.
+    redacted, blocks = redact_notice(number, body)
+    digest = write_bytes(xml_path, redacted)
+    entry = {
+        "publication_number": number,
+        "file": f"{number}.xml",
+        "role": "contract_notice",
+        "source_url": XML_URL.format(number=number),
+        "http_status": status,
+        "sha256": digest,
+        "redacted": True,
+        "contact_blocks_removed": blocks,
+        "notice_type": info["notice_type"],
+        "cpv_group": group,
+        "main_cpv": info["main_cpv"],
+        "publication_date": read_publication_date(body),
+        "procedure_id": info["procedure_id"],
+        "notice_id": info["notice_id"],
+        "changes_notice": None,
+        "fetched_at": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+    manifest["notices"].append(entry)
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return entry, lots
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--force", action="store_true", help="overwrite existing fixtures")
+    parser.add_argument("--add", metavar="NUMBER", help="fetch ONE more notice (one request)")
+    parser.add_argument("--min-lots", type=int, default=1, help="with --add: minimum lot count")
     args = parser.parse_args(argv)
+
+    if args.add:
+        client = Client(delay=ADD_DELAY_SECONDS, wait_first=True)
+        try:
+            entry, lots = add_notice(client, args.add, min_lots=args.min_lots)
+        except Stop as exc:
+            print(f"STOPPED: {exc} (requests made: {client.requests})")
+            return 2
+        print(f"Added {entry['publication_number']}: {entry['notice_type']}, ", end="")
+        print(f"CPV {entry['main_cpv']}, {lots} lots, published {entry['publication_date']}")
+        print(f"  contact blocks removed: {entry['contact_blocks_removed']}")
+        print(f"  saved: {(OUT_DIR / entry['file']).relative_to(REPO_ROOT)}")
+        print(f"  requests made: {client.requests}")
+        return 0
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     if any(OUT_DIR.iterdir()) and not args.force:

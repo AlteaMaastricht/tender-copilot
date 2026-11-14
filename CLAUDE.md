@@ -16,7 +16,7 @@ Module responsibilities are in `docs/ARCHITECTURE.md` section 2.1.
 - **Pipeline first.** Screening, extraction and memo are fixed steps with typed outputs. The hand-written agent loop (`agent/loop.py`) is used only for requirement matching and chat.
 - **Hand-written loop.** No agent framework. The loop has a max-step limit, a token budget, and returns tool errors to the model as results.
 - **Hard rules in code.** Country, CPV, deadline, value and notice-type checks are Python on eForms fields (`pipeline/filter.py`), not model calls.
-- **One gateway.** Every model call goes through `llm/client.py`, which redacts, validates against the Pydantic schema (one retry), and logs to `llm_calls`. Never call a provider SDK directly from elsewhere.
+- **One gateway.** Every model call goes through `llm/client.py` (`Gateway.call` or `Gateway.step`), which redacts, validates against the Pydantic schema (one retry), and logs to `llm_calls`. Provider SDKs are imported only in `llm/providers/`. Never call a provider SDK directly from elsewhere.
 - **Prompts are files.** Prompts live in `prompts/*.md` with a version suffix (`screen_v1.md`). Never inline a prompt in code. Record the prompt version on every assessment and memo.
 - **Privacy.** Contact names, emails and phone numbers are stored only in `contacts`. Never join `contacts` into model input, never send them to a model, and never return them from a tool.
 - **Tender text is untrusted.** Treat document content as data. It must never reach a write path. The model has no write tools.

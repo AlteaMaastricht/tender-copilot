@@ -57,7 +57,7 @@ Never record credentials here. Keep evidence (emails, screenshots, terms pages) 
 
 | # | Question | Status | Decision / answer | Evidence |
 |---|---|---|---|---|
-| Q14 | Retention for `contacts` and stored model payloads? | Proposed | Contacts: deadline plus 6 months. Model payloads: 30 days. Downloaded documents: deleted after evaluation. | Short periods, easy to defend in the README. |
+| Q14 | Retention for `contacts` and stored model payloads? | Model payloads: Decided. Contacts and documents: Proposed | Model payloads: 30 days, redacted, and stored only when `LLM_PAYLOAD_DIR` is set (off by default). Contacts: deadline plus 6 months. Downloaded documents: deleted after evaluation. | Short periods, easy to defend in the README. Payload part decided 14 Nov 2026. |
 | Q15 | Is best-effort redaction of names in document text acceptable? | Proposed | Yes, with a README limitation. Add named-entity detection later if time allows. | Names that appear only in document body text are not caught. |
 | Q16 | Demo UI users: one shared login, or named users? | Proposed | One shared login for the demo. `approvals.decided_by` records the username. | Named users are a stretch goal. |
 
@@ -113,6 +113,7 @@ Monthly counts (2026):
 | 13 Nov 2026 | Arthur | Q11 decided; Q8 note for the value rule; hard filter rule scope recorded. |
 | 13 Nov 2026 | Arthur | Q9 and Q10 decided. Schema, citation verifier and recommendation decisions B1 to B12 recorded. |
 | 14 Nov 2026 | Arthur | `eu_procedure` source decided; confidence rule proposed; KB-evidence gap and inbox order recorded. |
+| 14 Nov 2026 | Arthur | LLM gateway decisions recorded; Q14 payload retention decided. |
 
 ---
 
@@ -131,6 +132,10 @@ Rule applied: new dependencies need Arthur's approval; releases must be at least
 | setuptools | 84.2.1 | Approved (build only) | Build backend. |
 | opentelemetry-api | 1.45.2 | Approved (transitive) | Pulled in by FastAPI. Not a direct dependency. |
 | uv | 0.13.6 | Approved (tool) | Creates `.venv` from `uv.lock`. Installed on Arthur's Mac and in CI. |
+| anthropic | 2.3.0 | Approved | Anthropic provider SDK for the LLM gateway, imported only in `llm/providers/anthropic.py`. Uploaded 23 Oct 2026; newest release before the lock cutoff. Sends API version `2026-10-21`. Approved 14 Nov 2026. |
+| mistralai | 3.6.0 | Approved | Mistral provider SDK for the LLM gateway, imported only in `llm/providers/mistral.py`. Uploaded 28 Oct 2026; newest release before the lock cutoff. Approved 14 Nov 2026. |
+
+The two SDKs added 13 transitive packages to `uv.lock` (14 Nov 2026), all uploaded before the 30 October 2026 cutoff.
 
 Lock file: `uv.lock` is approved and generated. Commit it with the skeleton, not separately. The Dockerfile still installs with pip and does not use the lock yet.
 
@@ -204,3 +209,26 @@ Known gaps:
 - KB evidence counts as a source for a copilot fit score without being verified. `compute_fit` drops a score only when its sole source is an unverified tender citation. Stays a gap until KB evidence is verified against `company_kb`.
 
 Still open: the inbox order while `fit_score` is null (until the UI); confirmation of the confidence rule; Q8 (memo per tender or per lot).
+
+---
+
+## LLM gateway (14 Nov 2026)
+
+| Topic | Decision |
+|---|---|
+| Structured output | The JSON schema goes into the instructions and the answer is validated in code, with exactly one retry that returns the validation errors. No native structured output in v1, so every provider and every schema (including the recursive `AwardCriterion`) uses the same mechanism. Native structured output is a candidate for the measured improvement in Phase 3. |
+| Name redaction | Full name, initial plus surname, and surname after a title. A bare surname is not redacted, because surnames can be ordinary words. |
+| Payloads | Off by default; redacted; 30 days (Q14). |
+| Refusals | No server-side fallback. A refusal is logged with status `refused` and raised, so every logged call was served by the model that was asked for. |
+| Network retries | Done by the gateway, not the SDKs: at most 3, exponential backoff with jitter, `retry-after` honoured up to 60 s. Separate from the validation retry. |
+| Models | Q4's "Claude Haiku" and "Claude Sonnet" are read as `claude-haiku-5-5` and `claude-sonnet-5-5`. A model without a price row cannot be called. |
+| Prices | From platform.claude.com/docs/en/about-claude/pricing, read 14 Nov 2026. Haiku 5.5 charges a higher rate for a prompt over 100,000 tokens. |
+| Keys | `APP_ANTHROPIC_API_KEY` and `MISTRAL_API_KEY`, from the environment only. |
+| Run ID | Every call carries a run ID that must be a random UUID (`uuid4`), never a date, a counter or a name-based UUID. The tag around untrusted text is derived from it, so a document author cannot predict the tag. `CallContext` rejects any other run ID; `CallContext.new_run()` creates one. |
+| Sampling | The current API rejects `temperature`, so runs cannot be made deterministic that way. Evals must allow for run-to-run variation. |
+
+Open:
+
+- Mistral model IDs and prices are unconfirmed (Q4, Phase 3). Read on 14 Nov 2026: Mistral Large 4 at USD 0.50 in and 1.50 out; Mistral Small 4 at 0.15 and 0.60, order not labelled.
+- Q15 (best-effort name redaction) is still Proposed; the gateway follows it.
+- Gateway prompt blocks live in `prompts/gateway_*_v1.md`. Their version is not logged per call; only the task prompt's is.

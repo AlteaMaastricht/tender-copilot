@@ -45,7 +45,7 @@ Company KB ──(embedded once)──►  6 extract ──► 7 match (agent lo
 | `ingest/documents.py` | Unpack ZIP archives recursively, hash, apply the name rules, extract text per page from PDF, DOCX, PPTX, XLSX and legacy DOC, detect scanned files and language, track versions. See 2.10. |
 | `rag/chunk.py`, `rag/embed.py` | Section-based chunking with a fixed-size fallback; embedding; writes `chunks`. |
 | `rag/search.py` | Hybrid search (vector + full-text, reciprocal rank fusion) over `chunks` and `company_kb`. |
-| `llm/client.py` | The gateway: provider adapters (Anthropic, OpenAI, one of Gemini/Mistral), redaction, schema validation with one retry, cost and latency logging to `llm_calls`. |
+| `llm/` | The gateway package, entered only through `llm/client.py` (`Gateway.call`, `Gateway.step`). `redact.py` redaction; `prompts.py` prompt files and wrapping of untrusted text; `prices.py` price table; `log.py` call log and payload store; `providers/` adapters (Anthropic, Mistral; OpenAI later), the only modules that import a provider SDK. Schema validation with one retry; network retries with backoff; cost and latency logged in the `llm_calls` shape. |
 | `pipeline/filter.py` | Hard rules from `COMPANY.md` sections 4 and 5. |
 | `pipeline/screen.py` | Stage 1 screening call. |
 | `pipeline/extract.py` | Stage 2 extraction (map over sections, then merge). |
@@ -138,7 +138,11 @@ Per tender. The same agent loop with `get_tender`, `search_tender_docs`, `read_d
 ### 2.8 Privacy
 
 - Contact data lives only in `contacts`. No query used to build model input joins that table.
-- The gateway redacts emails, phone numbers and the contact names known from the notice before every call. This is best effort: names that appear only in document body text are not caught, and the README must say so.
+- The gateway redacts emails, phone numbers and the contact names from `contacts` before every call, in the system prompt, the data, user turns and tool results. Application code passes the names to a `Redactor`; they are used only for local matching. Matched name forms: full name, initial plus surname, surname after a title.
+- This is best effort, and the README must say so. Not caught: names that are not in `contacts`, a bare surname without a title, misspelt or OCR-damaged names, obfuscated email addresses, unusual phone formats, and other personal data such as postal addresses. A ten-digit number starting with 0 can be replaced as a phone number by mistake.
+- Tender text, notice text and tool results are passed to the gateway as data. It wraps them in tags named per run and never places them in the system prompt.
+- A quote copied from redacted text can contain `[EMAIL]`, `[PHONE]` or `[NAME]`. The caller of the citation verifier must redact the stored page text with the same `Redactor` before the check.
+- Stored payloads are redacted, off by default (`LLM_PAYLOAD_DIR`), and purged after 30 days.
 - `contacts` rows carry `purge_after` (deadline plus a retention period).
 
 ### 2.9 Deployment
@@ -418,12 +422,14 @@ Indexes: unique `(memo_id)`, unique `(crm_deal_id) where crm_deal_id is not null
 | provider, model | text | |
 | prompt_name, prompt_version | text | |
 | step_index | int | position in an agent loop |
-| input_tokens, output_tokens, cached_tokens | int | |
+| input_tokens, output_tokens, cached_tokens | int | `input_tokens` counts all prompt tokens; `cached_tokens` is the part read from a cache. Summed over a validation retry. |
 | cost_usd | numeric(10,6) | from a price table in config |
 | latency_ms | int | |
 | tool_calls | jsonb | names and arguments |
 | stop_reason | text | |
-| validation_retries | int | |
+| validation_retries | int | 0 or 1 |
+| network_retries | int | retries after 408, 409, 429, 5xx, connection errors and timeouts; at most 3 |
+| status | text | `ok`, `validation_failed`, `refused`, `truncated`, `provider_error` |
 | error | text, null | |
 | payload_path | text, null | redacted request and response on disk, short retention |
 

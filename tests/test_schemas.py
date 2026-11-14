@@ -527,3 +527,29 @@ def test_json_schema_builds(model):
 def test_no_schema_holds_contact_data(model):
     for name in model.model_fields:
         assert not any(word in name for word in ("contact", "email", "phone", "person"))
+
+
+# --- Agent-loop additions ------------------------------------------------------
+
+
+@pytest.mark.parametrize("reason", ["step_limit", "token_budget", "loop_failed"])
+def test_unclear_reasons_for_a_stopped_agent_run(reason):
+    parsed = RequirementMatch(
+        **match(status="unclear", company_evidence=[], unclear_reason=reason, gap="Not assessed.")
+    )
+    assert parsed.unclear_reason == reason
+
+
+def test_chat_answer():
+    from pipeline.schemas import ChatAnswer
+
+    data = {"answer": "De deadline is onbekend.", "citations": [citation()], "in_scope": True}
+    parsed = ChatAnswer(**data)
+    assert (
+        parsed.kb_evidence == []
+        and ChatAnswer.model_validate_json(parsed.model_dump_json()) == parsed
+    )
+    ChatAnswer(answer="Deze vraag gaat niet over de aanbesteding.", citations=[], in_scope=False)
+    for bad in ({"answer": "x" * 2001}, {"in_scope": None}, {"citations": [{"page": 1}]}):
+        with pytest.raises(ValidationError):
+            ChatAnswer(**{**data, **bad})

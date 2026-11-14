@@ -189,6 +189,16 @@ Mitigation = Literal[
 ]
 
 
+UnclearReason = Literal[
+    "vague_requirement",
+    "no_evidence_found",
+    "conflicting_documents",
+    "step_limit",  # the agent loop used all its steps
+    "token_budget",  # the agent loop used its token budget
+    "loop_failed",  # too many tool errors, or the model call failed
+]
+
+
 class RequirementMatch(BaseModel):
     requirement_id: str
     status: MatchStatus
@@ -197,10 +207,7 @@ class RequirementMatch(BaseModel):
     company_evidence: list[KbEvidence]
     gap: str | None = Field(description="What is missing, when not_met or unclear")
     mitigation: Mitigation
-    unclear_reason: (
-        Literal["vague_requirement", "no_evidence_found", "conflicting_documents", "step_limit"]
-        | None
-    )
+    unclear_reason: UnclearReason | None
 
     @model_validator(mode="after")
     def _status_rules(self) -> Self:
@@ -216,6 +223,18 @@ class RequirementMatch(BaseModel):
 class MatchingOutput(BaseModel):
     matches: list[RequirementMatch]
     award_notes: list[str]  # one short strength or weakness per award criterion
+
+
+# --- 5.5 chat ------------------------------------------------------------------
+
+
+class ChatAnswer(BaseModel):
+    """The final answer of one chat question (ARCHITECTURE.md 2.6)."""
+
+    answer: str = Field(max_length=2000)
+    citations: list[Citation]  # tender documents; verified in code like any citation
+    kb_evidence: list[KbEvidence] = []
+    in_scope: bool  # False: the question is not about this tender and is declined
 
 
 # --- 5.4 memo ------------------------------------------------------------------

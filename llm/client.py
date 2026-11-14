@@ -22,6 +22,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ValidationError
 
+from llm.env import read_key
 from llm.log import CallLog, LlmCallRecord, PayloadStore, Status
 from llm.prices import PRICES, ModelPrice
 from llm.prompts import (
@@ -162,7 +163,7 @@ class Gateway:
         self._payloads = payload_store
         # Key values are held only so they can be removed from error text before logging.
         if secrets is None:
-            secrets = (os.environ.get(name, "") for name in KEY_ENV_VARS)
+            secrets = (read_key(name) or "" for name in KEY_ENV_VARS)
         self._secrets = tuple(s for s in secrets if len(s) >= 8)
         self._sleep = sleep
         self._clock = clock

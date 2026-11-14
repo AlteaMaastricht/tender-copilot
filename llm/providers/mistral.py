@@ -9,11 +9,11 @@ added to `llm/prices.py` (DECISIONS.md Q4).
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
 from mistralai.client import Mistral, errors, models
 
+from llm.env import read_key
 from llm.providers.base import (
     Message,
     MissingKeyError,
@@ -162,7 +162,7 @@ class MistralProvider:
 
     def _get_client(self) -> Mistral:
         if self._client is None:
-            key = os.environ.get(KEY_ENV)
+            key = read_key(KEY_ENV)
             if not key:
                 raise MissingKeyError(KEY_ENV)
             self._client = Mistral(api_key=key)  # no retry_config: the SDK does not retry

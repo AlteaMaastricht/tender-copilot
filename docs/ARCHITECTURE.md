@@ -143,6 +143,7 @@ Per tender. The same agent loop with `get_tender`, `search_tender_docs`, `read_d
 - Tender text, notice text and tool results are passed to the gateway as data. It wraps them in tags named per run and never places them in the system prompt.
 - A quote copied from redacted text can contain `[EMAIL]`, `[PHONE]` or `[NAME]`. The caller of the citation verifier must redact the stored page text with the same `Redactor` before the check.
 - Stored payloads are redacted, off by default (`LLM_PAYLOAD_DIR`), and purged after 30 days.
+- Provider keys (`APP_ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`) come from the process environment first, then from `.env`, which `llm/env.py` reads only for the requested variable. Nothing is copied into the environment, printed or logged.
 - `contacts` rows carry `purge_after` (deadline plus a retention period).
 
 ### 2.9 Deployment

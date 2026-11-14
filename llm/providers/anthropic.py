@@ -8,11 +8,11 @@ SDK retries are off: the gateway owns retries.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import anthropic
 
+from llm.env import read_key
 from llm.providers.base import (
     Message,
     MissingKeyError,
@@ -131,7 +131,7 @@ class AnthropicProvider:
 
     def _get_client(self) -> anthropic.Anthropic:
         if self._client is None:
-            key = os.environ.get(KEY_ENV)
+            key = read_key(KEY_ENV)
             if not key:
                 raise MissingKeyError(KEY_ENV)
             self._client = anthropic.Anthropic(api_key=key, max_retries=0)

@@ -75,7 +75,14 @@ _FENCE = re.compile(r"^```[a-zA-Z]*\s*\n(.*)\n```$", re.DOTALL)
 
 
 class GatewayError(Exception):
-    """Base class for errors raised by the gateway itself."""
+    """Base class for errors raised by the gateway itself.
+
+    `usage` and `cost_usd` hold what the failed call was billed (for example a truncated
+    reply), so a caller that keeps a budget can count it.
+    """
+
+    usage: Usage = Usage()
+    cost_usd: Decimal = Decimal(0)
 
 
 class UnknownModelError(GatewayError):
@@ -340,6 +347,7 @@ class Gateway:
             raise
         except GatewayError as exc:
             error = self._scrub(f"{type(exc).__name__}: {exc}")
+            exc.usage, exc.cost_usd = tally.usage, tally.cost
             raise
         except Exception as exc:  # e.g. a missing key: never log a failed call as "ok"
             status = "provider_error"

@@ -53,7 +53,7 @@ Company KB ──(embedded once)──►  6 extract ──► 7 match (agent lo
 | `pipeline/schemas.py` | The Pydantic models of section 5, shared by every step and passed to the gateway for validation. |
 | `pipeline/citations.py` | Citation verifier: is the quote on the cited page? Pure code, used by the memo step and by chat. |
 | `pipeline/memo.py` | Memo generation, fit score, recommendation rules. |
-| `agent/loop.py`, `agent/tools.py` | Hand-written loop (max steps, tool errors returned to the model, token budget) and tool implementations. |
+| `agent/loop.py`, `agent/tools.py` | Hand-written loop (max steps, tool errors returned to the model, token budget); tool definitions, argument checks and the contact-data guard. `agent/fakes.py` is a fake tool backend until the database exists. |
 | `jobs/daily.py` | Orchestrates steps 1 to 8; takes a Postgres advisory lock so two runs cannot overlap. |
 | `app/` | Streamlit: inbox, memo view, chat per tender, approve/reject. |
 | `crm/hubspot.py` | Creates the deal from an approved memo. |
@@ -563,7 +563,21 @@ Removed from the PLAN.md list:
 }
 ```
 
-Loop limits: matching 6 steps per requirement, chat 8 steps per question, plus a token budget per loop. When a limit is hit during matching, the result is `unclear` with the reason `step_limit`.
+Loop limits (`agent/loop.py`). The numbers are tunable constants, to be adjusted from the Phase 3 measurements.
+
+| Limit | Matching | Chat | Constant |
+|---|---|---|---|
+| Steps (model calls) | 6 per requirement | 8 per question | `MATCH_MAX_STEPS`, `CHAT_MAX_STEPS` |
+| Token budget (prompt plus output tokens, summed over the steps of one run) | 60,000 | 80,000 | `MATCH_TOKEN_BUDGET`, `CHAT_TOKEN_BUDGET` |
+| Tool errors per run | 3 | 3 | `MAX_TOOL_ERRORS` |
+
+- When a limit is hit the loop returns no answer. It never forces one and never guesses. For matching, `pipeline/match.py` then builds an `unclear` match in code (section 5.3), which makes the tender `needs_review`.
+- The budget is checked after each step, so a run can pass it by one step. A final answer that arrives over budget is kept.
+- Unknown tools, invalid arguments and tool exceptions are returned to the model as error results. The third error in a run stops it.
+- A tool call can only read the run's own tender; another `tender_id` or another tender's document is refused.
+- A result larger than 20,000 characters is an error, not a truncation.
+- A result with a key that looks like contact data (`contact`, `email`, `phone`) is withheld.
+- The loop does not read tool results. The gateway wraps them as untrusted data, so text in a result cannot change the tools, the prompt or the limits.
 
 ## 5. Pydantic schemas
 
@@ -762,6 +776,16 @@ Mitigation = Literal[
 ]
 
 
+UnclearReason = Literal[
+    "vague_requirement",
+    "no_evidence_found",
+    "conflicting_documents",
+    "step_limit",  # the agent loop used all its steps
+    "token_budget",  # the agent loop used its token budget
+    "loop_failed",  # too many tool errors, or the model call failed
+]
+
+
 class RequirementMatch(BaseModel):
     requirement_id: str
     status: MatchStatus
@@ -770,10 +794,7 @@ class RequirementMatch(BaseModel):
     company_evidence: list[KbEvidence]
     gap: str | None = Field(description="What is missing, when not_met or unclear")
     mitigation: Mitigation
-    unclear_reason: (
-        Literal["vague_requirement", "no_evidence_found", "conflicting_documents", "step_limit"]
-        | None
-    )
+    unclear_reason: UnclearReason | None
 
     @model_validator(mode="after")
     def _status_rules(self) -> Self:
@@ -792,6 +813,16 @@ class MatchingOutput(BaseModel):
 ```
 
 Validation in the schema: `met` needs evidence, `unclear` needs an `unclear_reason`, `not_met` needs a `gap`. A failure is retried once by the gateway. After that, `pipeline/match.py` downgrades a `met` without evidence to `unclear` with the reason `no_evidence_found`.
+
+When the agent loop stops without an answer, `pipeline/match.py` builds the match in code: status `unclear`, no evidence, mitigation `none`, and the criterion's own citation.
+
+| Loop stop | `unclear_reason` |
+|---|---|
+| Step limit | `step_limit` |
+| Token budget | `token_budget` |
+| Three tool errors | `loop_failed` |
+| Model call failed (refusal, truncated output, invalid answer twice, provider error) | `loop_failed` |
+| `met` without evidence, twice | `no_evidence_found` |
 
 ### 5.4 Memo
 
@@ -1043,6 +1074,20 @@ Not yet defined, and known gaps:
 - A rule for a missing key document (the leidraad) comes after document classification.
 - "Working days left until closing" is computed when the memo is shown, not stored.
 - One memo per tender or per lot (question 8): `Memo` has no lot field.
+
+### 5.5 Chat answer
+
+```python
+class ChatAnswer(BaseModel):
+    """The final answer of one chat question (ARCHITECTURE.md 2.6)."""
+
+    answer: str = Field(max_length=2000)
+    citations: list[Citation]  # tender documents; verified in code like any citation
+    kb_evidence: list[KbEvidence] = []
+    in_scope: bool  # False: the question is not about this tender and is declined
+```
+
+The final answer of one chat question (2.6). Chat runs the same agent loop as matching, with the four chat tools, 8 steps and its own token budget. The question and earlier turns are passed as data. The caller verifies the citations like any others. On a limit there is no answer.
 
 ## 6. eForms fields used as eval ground truth
 

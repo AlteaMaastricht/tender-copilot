@@ -114,6 +114,7 @@ Monthly counts (2026):
 | 13 Nov 2026 | Arthur | Q9 and Q10 decided. Schema, citation verifier and recommendation decisions B1 to B12 recorded. |
 | 14 Nov 2026 | Arthur | `eu_procedure` source decided; confidence rule proposed; KB-evidence gap and inbox order recorded. |
 | 14 Nov 2026 | Arthur | LLM gateway decisions recorded; Q14 payload retention decided. |
+| 15 Nov 2026 | Arthur | Agent loop decisions recorded: limits, stop reasons, `ChatAnswer`. |
 
 ---
 
@@ -232,3 +233,26 @@ Open:
 - Mistral model IDs and prices are unconfirmed (Q4, Phase 3). Read on 14 Nov 2026: Mistral Large 4 at USD 0.50 in and 1.50 out; Mistral Small 4 at 0.15 and 0.60, order not labelled.
 - Q15 (best-effort name redaction) is still Proposed; the gateway follows it.
 - Gateway prompt blocks live in `prompts/gateway_*_v1.md`. Their version is not logged per call; only the task prompt's is.
+
+---
+
+## Agent loop (15 Nov 2026)
+
+| Topic | Decision |
+|---|---|
+| Token budget | 60,000 tokens per matching run and 80,000 per chat question, counted as prompt plus output tokens over all steps. Tunable constants in `agent/loop.py`; to be adjusted from the Phase 3 measurements. |
+| Steps | 6 per requirement, 8 per chat question. |
+| Tool errors | Returned to the model as error results. The third error in a run stops it. |
+| Stop reasons | `RequirementMatch.unclear_reason` gains `token_budget` and `loop_failed`. A run that stops without an answer becomes an `unclear` match built in code, so the tender is `needs_review`. |
+| Matching wrapper | `pipeline/match.py` runs one loop per knock-out and owns the `met`-without-evidence downgrade (B8). |
+| Chat | Reuses the same loop with four tools and a `ChatAnswer` (answer, citations, KB evidence, `in_scope`). |
+| Tools | The five read tools of `ARCHITECTURE.md` section 4, with fake implementations (`agent/fakes.py`) until the database exists. A call can only read the run's own tender. No tool may return contact data; a guard (English and Dutch key names, including a name under a person-like parent) and tests enforce it. |
+
+Candidate for the measured improvement in Phase 3: prompt caching for agent steps. Every step resends the system prompt, the tool definitions and the whole conversation, so most prompt tokens of steps 2 to 6 are repeats. The gateway sends no cache settings yet; the log already has `cached_tokens` to measure the effect.
+
+Open:
+
+- `prompts/match_v1.md` and the chat prompt are not written yet.
+- A real model's resistance to injected instructions is untested; the tests only show that the loop gives such text no power. It belongs to the `edge_cases` eval suite.
+
+Whether a real model ignores injected instructions is tested in the Phase 3 edge cases.

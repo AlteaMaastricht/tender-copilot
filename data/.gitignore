@@ -1,2 +1,4 @@
 snapshot_candidates_raw.psv
 snapshot_candidates.csv
+llm_calls.jsonl
+llm_payloads/

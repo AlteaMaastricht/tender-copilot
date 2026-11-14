@@ -50,7 +50,9 @@ Company KB ──(embedded once)──►  6 extract ──► 7 match (agent lo
 | `pipeline/screen.py` | Stage 1 screening call. |
 | `pipeline/extract.py` | Stage 2 extraction (map over sections, then merge). |
 | `pipeline/match.py` | Requirement matching; one agent loop per requirement. |
-| `pipeline/memo.py` | Memo generation, fit score, citation verification. |
+| `pipeline/schemas.py` | The Pydantic models of section 5, shared by every step and passed to the gateway for validation. |
+| `pipeline/citations.py` | Citation verifier: is the quote on the cited page? Pure code, used by the memo step and by chat. |
+| `pipeline/memo.py` | Memo generation, fit score, recommendation rules. |
 | `agent/loop.py`, `agent/tools.py` | Hand-written loop (max steps, tool errors returned to the model, token budget) and tool implementations. |
 | `jobs/daily.py` | Orchestrates steps 1 to 8; takes a Postgres advisory lock so two runs cannot overlap. |
 | `app/` | Streamlit: inbox, memo view, chat per tender, approve/reject. |
@@ -115,8 +117,13 @@ One call per tender with a small model. Input: redacted notice title, descriptio
 - Award criteria are not matched as met or not met. They get a short strength note for the memo.
 
 **Memo.**
-- The fit score is computed in code from the match results and notice fields (section 5.4). The model writes text, not scores.
-- Citation check: for every citation, the quote is normalised (whitespace, hyphenation, case) and searched on the cited page and the pages on either side. Unverified citations are marked in the memo. Any unverified citation on a knock-out sets the recommendation to `needs_review`.
+- Fit score: the model scores four of the seven dimensions from 1 to 5, each with a rationale and a source. The bid team scores the other three in the UI. Code computes the total and the range it can still reach (section 5.4).
+- Recommendation: decided in code from the knock-out results and the fit score (section 5.4). The model writes only the one-sentence reason.
+- Citation check (`pipeline/citations.py`): the quote must be one contiguous piece of the text of the cited page. Neighbouring pages are not searched, so a quote that runs over a page break fails; the evals count these as false negatives.
+  - Normalised on both sides: Unicode NFKC (ligatures, non-breaking spaces, composed accents), invisible characters, hyphens at line breaks, whitespace, quote marks and apostrophes, dashes, case.
+  - Not normalised: accents, punctuation, number formats. There is no fuzzy matching.
+  - Always fails: a quote with fewer than 10 letters or digits, a quote shortened in the middle, an empty page.
+  - The result is pass or fail with a reason code. Unverified citations are marked in the memo and do not count as a source.
 
 ### 2.6 Chat
 
@@ -355,14 +362,35 @@ Indexes: unique `(tender_id, stage) where is_current`, `(run_id)`, `(stage, deci
 | version | int | |
 | content | jsonb | `Memo` model |
 | rendered_md | text | |
-| recommendation | text | `bid`, `no_bid`, `needs_review` |
-| fit_score | int | 0 to 100 |
+| recommendation | text | `bid`, `bid_conditional`, `no_bid`, `needs_review` |
+| fit_score | int, null | 0 to 100; null until all seven dimensions are scored |
+| fit_score_min, fit_score_max | int | the range the total can still reach (section 5.4) |
 | citations_total, citations_verified | int | |
 | extraction_id, matching_id | fk assessments | inputs used |
 | prompt_version, model | text | |
 | is_current | bool | |
 
-Indexes: unique `(tender_id, version)`, `(is_current, fit_score desc)` for the inbox.
+Indexes: unique `(tender_id, version)`, `(is_current, fit_score desc)` for the inbox. With `fit_score` nullable, the inbox order needs a decision (for example by `fit_score_max`); open until the UI is built (`docs/DECISIONS.md`).
+
+### memo_human_inputs (proposed, built with the database on Day 7)
+The `[human]` items of the memo template. Keyed on the tender, so the inputs survive a new memo version. Never sent to a model: owner names are personal data of staff.
+
+| Column | Type | Notes |
+|---|---|---|
+| tender_id | fk tenders, unique, on delete cascade | |
+| incumbent | text, null | zittende partij, if known |
+| fit_win_probability, fit_commercial, fit_strategic_value | smallint, null | 1 to 5; null until scored |
+| fit_rationale | jsonb | rationale per human dimension |
+| milestones | jsonb | internal go/no-go, red team, sign-off, with dates and owners |
+| row_owners | jsonb | owner per knock-out, award and risk row |
+| risk_overrides | jsonb | human changes to likelihood, impact and mitigation |
+| deadline_realistic | bool, null | |
+| price_to_win | text, null | |
+| bid_investment | text, null | hours or cost, team |
+| updated_by | text | UI username |
+| updated_at | timestamptz | |
+
+A change to a human fit score triggers a new fit score and recommendation.
 
 ### approvals
 
@@ -532,38 +560,75 @@ Loop limits: matching 6 steps per requirement, chat 8 steps per question, plus a
 
 ## 5. Pydantic schemas
 
-Shared types first. These are the contracts between steps and the shape of `assessments.output` and `memos.content`.
+These are the contracts between steps and the shape of `assessments.output` and `memos.content`. They live in `pipeline/schemas.py`; the code blocks below are that file. No schema holds contact data.
+
+Shared types first.
 
 ```python
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
-from pydantic import BaseModel, Field
+from typing import Literal, Self, get_args
+from pydantic import BaseModel, Field, model_validator
 
 class Citation(BaseModel):
     """A checkable pointer into a tender document."""
+
     document_id: int
     page: int = Field(ge=1)
     quote: str = Field(min_length=10, max_length=600, description="Verbatim text from that page")
     verified: bool | None = None  # set by code after the citation check, never by the model
 
+
 class KbEvidence(BaseModel):
-    """A pointer into the company knowledge base."""
+    """A pointer into the company knowledge base. Not yet verified in code."""
+
     kb_id: int
     doc_slug: str
     quote: str = Field(max_length=600)
+
+
+class KeyDateTime(BaseModel):
+    value: datetime
+    citation: Citation
+
+
+class KeyDate(BaseModel):
+    value: date
+    citation: Citation
+
+
+class CitedText(BaseModel):
+    text: str = Field(max_length=300)
+    citation: Citation
+
+
+Level = Literal["high", "medium", "low"]
 ```
+
+- `Citation.verified` is always overwritten by the citation check (`pipeline/citations.py`). A value set by a model has no effect.
+- `KbEvidence` quotes are not verified yet. They will be checked against `company_kb.content` later.
 
 ### 5.1 Screening output
 
 ```python
 ExclusionFlag = Literal[
-    "hardware_supply", "staffing_only", "security_clearance", "onsite_abroad",
-    "ops_24_7", "pure_custom_software", "liability", "none",
+    "hardware_supply",
+    "staffing_only",
+    "security_clearance",
+    "onsite_abroad",
+    "ops_24_7",
+    "pure_custom_software",
+    "liability",
+    "none",
 ]
 ServiceLine = Literal[
-    "data_platform", "ai_ml", "bi_dashboards", "cloud_migration", "data_governance",
+    "data_platform",
+    "ai_ml",
+    "bi_dashboards",
+    "cloud_migration",
+    "data_governance",
 ]
+
 
 class ScreeningOutput(BaseModel):
     decision: Literal["shortlist", "reject", "unsure"]
@@ -571,46 +636,82 @@ class ScreeningOutput(BaseModel):
     matched_services: list[ServiceLine]
     exclusion_flags: list[ExclusionFlag]
     confidence: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def _none_is_exclusive(self) -> Self:
+        if "none" in self.exclusion_flags and len(self.exclusion_flags) > 1:
+            raise ValueError("exclusion flag 'none' cannot be combined with other flags")
+        return self
 ```
 
-`confidence` is used for ranking only. Its calibration is measured in the screening eval before it is trusted for anything else.
+`confidence` is used for ranking only. Its calibration is measured in the screening eval before it is trusted for anything else. The flag `none` cannot be combined with another flag.
 
 ### 5.2 Extraction output
 
 ```python
 class KeyDates(BaseModel):
-    submission_deadline: datetime | None
-    questions_deadline: datetime | None
-    site_visit: datetime | None = None
-    award_expected: date | None = None
-    contract_start: date | None = None
-    citations: list[Citation]
+    """Dates read from the documents, each with its own citation."""
+
+    # Graded against TenderNed `sluitingsDatum` only. Never shown in a memo.
+    submission_deadline: KeyDateTime | None
+    questions_deadline: KeyDateTime | None
+    site_visit: KeyDateTime | None = None
+    presentation: KeyDateTime | None = None  # presentation, interview or demo
+    award_expected: KeyDate | None = None
+    standstill_end: KeyDate | None = None  # end of the Alcatel period
+    tender_validity: CitedText | None = None  # gestanddoeningstermijn, often a duration
+    contract_start: KeyDate | None = None
+
 
 class LotScope(BaseModel):
-    lot_identifier: str | None       # None when the tender has no lots
+    lot_identifier: str | None  # None when the tender has no lots
     title: str
     summary: str = Field(max_length=600)
     estimated_value_eur: Decimal | None
+    ceiling_value_eur: Decimal | None  # plafondbedrag
     value_includes_vat: bool | None
     duration_months: int | None
     extension_months: int | None
     citations: list[Citation]
 
+
 RequirementCategory = Literal[
-    "exclusion_ground", "financial", "insurance", "certification", "reference_project",
-    "staff_qualification", "technical_capacity", "legal_form", "language",
-    "security", "other",
+    "exclusion_ground",
+    "financial",
+    "insurance",
+    "certification",
+    "reference_project",
+    "staff_qualification",
+    "technical_capacity",
+    "legal_form",
+    "language",
+    "security",
+    "other",
 ]
+KnockoutKind = Literal["exclusion", "suitability", "minimum_requirement", "formal"]
+ProofWhen = Literal["uea", "with_bid", "on_request"]
+AwardBasis = Literal["bpkv", "lowest_price", "lowest_cost"]
+Framework = Literal["none", "single", "multi"]
+
+KO_ID_PATTERN = r"^KO-\d{2,}$"
+
 
 class KnockoutCriterion(BaseModel):
-    requirement_id: str               # "KO-01", assigned in the reduce step
+    requirement_id: str = Field(pattern=KO_ID_PATTERN)  # "KO-01", assigned in the reduce step
     category: RequirementCategory
+    kind: KnockoutKind
     text: str = Field(description="The requirement restated in one sentence")
-    threshold: str | None = Field(description="Number, date or named standard, e.g. 'EUR 1,000,000 per year'")
-    applies_to_lots: list[str] = []   # empty means all lots
-    consortium_allowed: bool | None   # may be met jointly or via a third party
+    threshold: str | None = Field(
+        description="Number, date or named standard, e.g. 'EUR 1,000,000 per year'"
+    )
+    proof: str | None = Field(description="The evidence the buyer asks for")
+    proof_when: ProofWhen | None
+    applies_to_lots: list[str] = []  # empty means all lots
+    consortium_allowed: bool | None  # may be met jointly or via a third party
+    disproportionate: bool = False  # looks disproportionate (Gids Proportionaliteit)
     citation: Citation
     overridden_by_qa: bool = False
+
 
 class AwardCriterion(BaseModel):
     name: str
@@ -618,13 +719,17 @@ class AwardCriterion(BaseModel):
     weight_pct: float | None = Field(ge=0, le=100)
     max_points: float | None
     description: str = Field(max_length=600)
-    subcriteria: list["AwardCriterion"] = []
+    scoring_method: str | None = Field(description="Scale, panel, page limit or price formula")
+    subcriteria: list[AwardCriterion] = []
     citation: Citation
+
 
 class ExtractionOutput(BaseModel):
     key_dates: KeyDates
     lots: list[LotScope]
+    framework: Framework | None
     knockout_criteria: list[KnockoutCriterion]
+    award_basis: AwardBasis | None
     award_criteria: list[AwardCriterion]
     contract_risks: list[str] = Field(description="Liability, penalties, IP, exit terms")
     documents_read: list[int]
@@ -632,67 +737,305 @@ class ExtractionOutput(BaseModel):
     warnings: list[str] = Field(description="E.g. scanned document, token budget reached")
 ```
 
+- Each key date carries its own citation.
+- `KeyDates.submission_deadline` is kept for grading only (6.1). A memo never shows it.
+- Requirement identifiers are `KO-01`, `KO-02`, ... everywhere.
+
 ### 5.3 Requirement-match output
 
 ```python
+MatchStatus = Literal["met", "not_met", "unclear"]
+Mitigation = Literal[
+    "none",
+    "consortium",
+    "subcontractor",
+    "third_party",  # beroep op derden
+    "ask_in_qa",
+    "obtain_before_deadline",
+]
+
+
 class RequirementMatch(BaseModel):
     requirement_id: str
-    status: Literal["met", "not_met", "unclear"]
+    status: MatchStatus
     reasoning: str = Field(max_length=500)
     tender_citation: Citation
-    company_evidence: list[KbEvidence]  # must be non-empty when status == "met"
+    company_evidence: list[KbEvidence]
     gap: str | None = Field(description="What is missing, when not_met or unclear")
-    mitigation: Literal["none", "consortium", "subcontractor", "ask_in_qa", "obtain_before_deadline"]
-    unclear_reason: Literal["vague_requirement", "no_evidence_found", "conflicting_documents", "step_limit"] | None
+    mitigation: Mitigation
+    unclear_reason: (
+        Literal["vague_requirement", "no_evidence_found", "conflicting_documents", "step_limit"]
+        | None
+    )
+
+    @model_validator(mode="after")
+    def _status_rules(self) -> Self:
+        if self.status == "met" and not self.company_evidence:
+            raise ValueError("status 'met' needs at least one company_evidence item")
+        if self.status == "unclear" and self.unclear_reason is None:
+            raise ValueError("status 'unclear' needs an unclear_reason")
+        if self.status == "not_met" and not (self.gap and self.gap.strip()):
+            raise ValueError("status 'not_met' needs a gap")
+        return self
+
 
 class MatchingOutput(BaseModel):
     matches: list[RequirementMatch]
-    award_notes: list[str]              # one short strength or weakness per award criterion
+    award_notes: list[str]  # one short strength or weakness per award criterion
 ```
 
-Validation in code: `met` without evidence is rejected and retried once, then downgraded to `unclear`.
+Validation in the schema: `met` needs evidence, `unclear` needs an `unclear_reason`, `not_met` needs a `gap`. A failure is retried once by the gateway. After that, `pipeline/match.py` downgrades a `met` without evidence to `unclear` with the reason `no_evidence_found`.
 
 ### 5.4 Memo
 
+`Memo` is the stored shape (`memos.content`). It covers every `[copilot]` and `[code]` item of `docs/MEMO_TEMPLATE.md`. It is not a model output shape: the model-facing draft schema is defined separately, before the memo prompt is written. `[human]` items are stored in `memo_human_inputs` (section 3).
+
 ```python
+FitDimensionName = Literal[
+    "scope_match",
+    "win_probability",
+    "references",
+    "commercial",
+    "capacity_timing",
+    "contract_risk",
+    "strategic_value",
+]
+Recommendation = Literal["bid", "bid_conditional", "no_bid", "needs_review"]
+DocType = Literal[
+    "guideline",
+    "requirements",
+    "qa",
+    "notice",
+    "contract",
+    "pricing",
+    "form",
+    "annex",
+    "other",
+]
+
+
+class FitDimension(BaseModel):
+    name: FitDimensionName
+    weight_pct: int = Field(ge=0, le=100)  # set by code from the fixed table
+    scored_by: Literal["copilot", "human"]
+    score: int | None = Field(default=None, ge=1, le=5)  # None: not scored
+    rationale: str | None = Field(default=None, max_length=400)
+    citation: Citation | None = None
+    kb_evidence: list[KbEvidence] = []
+
+    @model_validator(mode="after")
+    def _copilot_score_needs_source(self) -> Self:
+        if self.scored_by == "copilot" and self.score is not None:
+            if not (self.rationale and self.rationale.strip()):
+                raise ValueError("a copilot score needs a rationale")
+            if self.citation is None and not self.kb_evidence:
+                raise ValueError("a copilot score needs a citation or KB evidence")
+        return self
+
+
 class FitScore(BaseModel):
-    """Computed in code, not by the model."""
-    total: int = Field(ge=0, le=100)
-    knockouts_met: int
-    knockouts_not_met: int
-    knockouts_unclear: int
-    quality_weight_pct: float | None    # company prefers 50% or more
-    value_in_range: bool | None
-    service_overlap: float = Field(ge=0, le=1)
+    """Computed in code (`pipeline/memo.py`) from the seven dimensions."""
+
+    dimensions: list[FitDimension]
+    total: int | None = Field(ge=0, le=100)  # None while any dimension is unscored
+    provisional_min: int = Field(ge=0, le=100)  # unscored dimensions at 1
+    provisional_max: int = Field(ge=0, le=100)  # unscored dimensions at 5
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        names = sorted(d.name for d in self.dimensions)
+        if names != sorted(get_args(FitDimensionName)):
+            raise ValueError("fit needs each of the seven dimensions exactly once")
+        if sum(d.weight_pct for d in self.dimensions) != 100:
+            raise ValueError("fit weights must sum to 100")
+        if self.provisional_min > self.provisional_max:
+            raise ValueError("provisional_min is above provisional_max")
+        if self.total is not None and not (
+            self.total == self.provisional_min == self.provisional_max
+        ):
+            raise ValueError("a final total must equal provisional_min and provisional_max")
+        return self
+
+
+class TenderFacts(BaseModel):
+    """Snapshot of the `tenders` row, filled by code. Organisation data only."""
+
+    buyer_name: str
+    title: str
+    tenderned_id: str | None
+    tenderned_url: str | None
+    main_nature: str | None
+    procedure_type: str | None
+    eu_procedure: bool | None  # TenderNed nationaalOfEuropeesCode; None without a match
+    cpv_codes: list[str]
+    documents_access: Literal["tenderned", "other_platform", "login_required", "none"]
+    published_at: datetime | None
+
+
+class MemoDeadlines(BaseModel):
+    # From `tenders.deadline_at` (TenderNed API) only; None is shown as "unknown".
+    submission_deadline: datetime | None
+    questions_deadline: KeyDateTime | None
+    qa_publications: list[KeyDate] = []  # Nota van Inlichtingen 1, 2, ...
+    site_visit: KeyDateTime | None = None
+    presentation: KeyDateTime | None = None
+    award_expected: KeyDate | None = None
+    standstill_end: KeyDate | None = None
+    tender_validity: CitedText | None = None
+    contract_start: KeyDate | None = None
+
 
 class KnockoutRow(BaseModel):
-    requirement_id: str
+    requirement_id: str = Field(pattern=KO_ID_PATTERN)
     requirement: str
-    status: Literal["met", "not_met", "unclear"]
-    evidence: str
+    kind: KnockoutKind
+    proof: str | None
+    proof_when: ProofWhen | None
+    status: MatchStatus
+    evidence: list[KbEvidence]
+    gap: str | None
+    mitigation: Mitigation
+    disproportionate: bool = False
     tender_citation: Citation
+
+
+class AwardRow(BaseModel):
+    name: str
+    kind: Literal["price", "quality", "cost"]
+    weight_pct: float | None = Field(ge=0, le=100)
+    max_points: float | None
+    scoring_method: str | None
+    position: Level | None  # our position; None when there is no basis to judge
+    win_theme: str | None
+    evidence: list[KbEvidence] = []
+    citation: Citation
+
+
+class RiskRow(BaseModel):
+    risk_id: str = Field(pattern=r"^R-\d{2,}$")
+    text: str
+    category: Literal[
+        "contract_terms",
+        "liability_penalties",
+        "ip",
+        "indexation",
+        "volume",
+        "social_return",
+        "sustainability",
+        "privacy_security",
+        "subcontracting",
+        "capacity",
+        "other",
+    ]
+    likelihood: Level
+    impact: Level
+    mitigation: Literal["price_in", "ask_in_qa", "accept"]
+    citation: Citation | None = None  # None for risks on our own side, e.g. capacity
+
+
+class QaQuestion(BaseModel):
+    question_id: str = Field(pattern=r"^Q-\d{2,}$")
+    question: str  # always Dutch, whatever the memo language
+    purpose: Literal["clarification", "contradiction", "proportionality", "error"]
+    linked_to: list[str] = []  # KO-.. and R-.. identifiers
+    priority: Level
+    citation: Citation | None = None
+
+
+class ReviewedDocument(BaseModel):
+    document_id: int
+    tag: str  # the ID used in source tags, e.g. "LEIDRAAD", "NvI-2"
+    filename: str
+    doc_type: DocType
+    published_at: date | None  # TenderNed `datumPublicatie`
+
 
 class Memo(BaseModel):
     tender_id: int
-    language: Literal["nl", "en"]
+    language: Literal["nl", "en"]  # code always sets "en" (decision Q10)
+    tender: TenderFacts
     summary: str = Field(max_length=1200)
-    key_dates: KeyDates
+    lots: list[LotScope]
+    target_lots: list[str]
+    framework: Framework | None
+    deadlines: MemoDeadlines
     fit: FitScore
     knockout_table: list[KnockoutRow]
-    award_strategy: str
-    risks_and_gaps: list[str]
-    questions_for_qa: list[str]         # for the Nota van Inlichtingen
-    recommendation: Literal["bid", "no_bid", "needs_review"]
-    recommendation_reason: str = Field(max_length=600)
-    citations: list[Citation]
-    limitations: list[str]              # e.g. "documents not accessible", "2 citations unverified"
+    award_basis: AwardBasis | None
+    price_quality_tradeoff: str | None
+    award_table: list[AwardRow]
+    risks: list[RiskRow]
+    questions_for_qa: list[QaQuestion]
+    recommendation: Recommendation  # decided in code, never by the model
+    recommendation_reason: str = Field(max_length=600)  # one sentence, written by the model
+    recommendation_reason_codes: list[str]  # from the recommendation rules
+    reasons: list[str] = Field(max_length=3)
+    conditions: list[str]  # what must be true, and by when, for bid_conditional
+    confidence: Level
+    reflects_qa_document_ids: list[int]  # the Nota's van Inlichtingen this memo reflects
+    documents_reviewed: list[ReviewedDocument]
+    citations: list[Citation]  # de-duplicated union of all citations above, built by code
+    limitations: list[str]  # e.g. "documents not accessible", "2 citations unverified"
 ```
 
-Recommendation rules applied in code after generation:
+Filled by code, never by the model: `tender`, `deadlines.submission_deadline`, `fit.total` and the provisional range, `recommendation`, `recommendation_reason_codes`, `documents_reviewed`, `citations`, every `verified` flag, and `language` (always `en`, decision Q10; questions for the Nota van Inlichtingen stay Dutch).
 
-- any knock-out `not_met` with mitigation `none`: `no_bid`
-- any knock-out `unclear`, any unverified knock-out citation, or documents missing: `needs_review`
-- otherwise the model's recommendation stands
+**Submission deadline.** Code sets `deadlines.submission_deadline` from `tenders.deadline_at` (TenderNed API). When that is null the memo shows "unknown", never the extracted value. When the extracted and the API value differ, the code `deadline_differs_from_documents` is added to `limitations`.
+
+**Citations.** Code builds `Memo.citations` as the de-duplicated union of every citation in the memo. `memos.citations_total` and `citations_verified` are counted from it.
+
+**Fit score** (`pipeline/memo.py`, decision Q9). Seven dimensions with the weights of the memo template, section 3:
+
+| Dimension | Weight | Scored by |
+|---|---|---|
+| `scope_match` | 25 | copilot |
+| `win_probability` | 20 | human |
+| `references` | 15 | copilot |
+| `commercial` | 15 | human |
+| `capacity_timing` | 10 | copilot |
+| `contract_risk` | 10 | copilot |
+| `strategic_value` | 5 | human |
+
+- Total = sum(weight x score) / 5, with scores 1 to 5, so the total runs from 20 to 100.
+- A copilot score needs a rationale and a source: KB evidence, or a tender citation that passed the citation check. Without one, code drops the score.
+- An unscored dimension, human or copilot, counts 1 for `provisional_min` and 5 for `provisional_max`. `total` is null until all seven are scored.
+- When the human scores are entered, the fit score and the recommendation are computed again.
+
+**Recommendation rules** (`decide_recommendation` in `pipeline/memo.py`). The model proposes no value; it writes only `recommendation_reason`. Rules are applied in this order:
+
+1. Documents missing (status `docs_unavailable`, or every document scanned or unsupported): `needs_review`.
+2. No knock-out criteria extracted: `needs_review`.
+3. A knock-out `not_met` with mitigation `none`, with both its citations verified: `no_bid`. This wins over every rule below.
+4. Any of the following: `needs_review`.
+   - a knock-out `unclear`
+   - a knock-out `not_met` with mitigation `ask_in_qa` (the outcome depends on the buyer)
+   - a knock-out `not_met` with mitigation `none` whose own citation is unverified
+   - any other unverified knock-out citation
+   - a knock-out without a match, a match without a knock-out, or a duplicate identifier
+5. A knock-out `not_met` with mitigation `consortium`, `subcontractor`, `third_party` or `obtain_before_deadline`: the result is capped at `bid_conditional`.
+6. Fit score bands: 70 or more `bid`, 50 to 69 `bid_conditional`, under 50 `no_bid`. The result is the worse of the cap and the band. If every score between `provisional_min` and `provisional_max` gives the same result, that result is used. Otherwise `needs_review`, with `awaiting_human_scores` or `fit_score_incomplete`.
+
+A knock-out citation is verified when both `KnockoutCriterion.citation` and `RequirementMatch.tender_citation` passed the check. With all three human scores missing the range is 32 points wide, so a tender with no knock-out problem is always `needs_review` until a human scores it.
+
+**Confidence** (proposed, not built). Code sets `Memo.confidence`, never the model. It is computed after the recommendation and does not feed into it.
+
+| Value | When |
+|---|---|
+| `low` | Any one of these: documents missing; no knock-outs extracted; any knock-out citation unverified; a quarter or more of `Memo.citations` unverified; an extraction warning about a key document (scanned, token budget reached) |
+| `high` | All of these: every knock-out matched with both citations verified; no knock-out `unclear`; all four copilot fit dimensions scored; every citation in `Memo.citations` verified; no extraction warnings |
+| `medium` | Everything else |
+
+The quarter threshold is a first guess, to be set from the evals.
+
+**EU or national.** `TenderFacts.eu_procedure` comes from TenderNed `nationaalOfEuropeesCode` on the publication detail (`tenders.tenderned_detail`), read when the memo is built; no extra column. Null when there is no TenderNed match. The code values and their mapping to true or false: **(confirm)**.
+
+Not yet defined, and known gaps:
+
+- KB evidence counts as a source for a copilot fit score without being verified (known gap until KB verification is built). Only an unverified tender citation drops a score.
+- The inbox order while `fit_score` is null: open until the UI is built.
+- A rule for a missing key document (the leidraad) comes after document classification.
+- "Working days left until closing" is computed when the memo is shown, not stored.
+- One memo per tender or per lot (question 8): `Memo` has no lot field.
 
 ## 6. eForms fields used as eval ground truth
 
@@ -766,8 +1109,8 @@ Model comparison: three providers on screening and on extraction plus matching, 
 
 **Product behaviour**
 8. One memo per tender, or one per lot? The schema assumes per tender with lot detail inside.
-9. Fit score: confirm it is a formula in code, and choose the weights.
-10. Memo language: Dutch, English, or the language of the tender?
+9. Fit score: decided, see section 5.4 and `docs/DECISIONS.md`.
+10. Memo language: decided, always English. Questions for the Nota van Inlichtingen stay Dutch.
 11. Tenders above EUR 2M: drop, or keep with a "consortium only" flag as proposed?
 12. How many tenders may go to Stage 2 per day, and what is the daily cost cap?
 13. Should "unsure" from screening always be shortlisted, or only above a confidence level?
@@ -801,3 +1144,6 @@ Model comparison: three providers on screening and on extraction plus matching, 
 | (not in plan) | Document versions, de-duplication by SHA-256 only | Same name appears several times |
 | (not in plan) | Name rules before the model classifier; `notice` type | Cheaper, and keeps notice copies out of the corpus |
 | (not in plan) | Placeholder closing dates treated as unknown | 2099-12-31 found in the data |
+| Recommendation: bid, no-bid, needs review | Four values, with `bid_conditional`; decided in code | Matches the memo template |
+| Fit score (no formula) | Seven weighted dimensions, four scored by the model and three by a human, with a provisional range | Decision Q9 |
+| (not in plan) | `pipeline/schemas.py`, `pipeline/citations.py`, `memo_human_inputs` | Shared contracts; chat also verifies citations; human items need storage |

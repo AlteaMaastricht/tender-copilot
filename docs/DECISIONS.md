@@ -47,8 +47,8 @@ Never record credentials here. Keep evidence (emails, screenshots, terms pages) 
 | # | Question | Status | Decision / answer | Evidence |
 |---|---|---|---|---|
 | Q8 | One memo per tender, or per lot? | Open | Value rule (hard filter) checks per lot: lot values first, the procedure value (BT-27) only when no lot has a value, no value at all gives `unknown` with a flag. The memo question (one memo per tender or per lot) is still open. | |
-| Q9 | Fit score: formula in code, and weights? | Open | | |
-| Q10 | Memo language: Dutch, English, or the tender's language? | Open | | |
+| Q9 | Fit score: formula in code, and weights? | Decided | Formula in code: Score = sum(weight x score) / 5 over the seven dimensions and weights of `MEMO_TEMPLATE.md` section 3. The model scores four dimensions (1 to 5, each with rationale and source); a human scores three. An unscored dimension counts 1 for the minimum and 5 for the maximum. Bands: 70 or more bid, 50 to 69 bid with conditions, under 50 no-bid, applied after the knock-out rules. A range that crosses a band gives `needs_review`. | `ARCHITECTURE.md` 5.4; `pipeline/memo.py`. |
+| Q10 | Memo language: Dutch, English, or the tender's language? | Decided | Always English. Questions for the Nota van Inlichtingen stay Dutch. | Decided 13 Nov 2026. |
 | Q11 | Tenders above EUR 2M: drop, or keep with "consortium only"? | Decided | Keep, with a 'consortium only' flag (hard filter: outcome pass, flag `consortium_only`). | Matches `COMPANY.md` section 4. |
 | Q12 | Tenders per day at Stage 2, and the daily cost cap? | Open | | Set after the Phase 3 cost measurements. |
 | Q13 | Should "unsure" screening results always be shortlisted? | Proposed | Yes. | Stage 1 is tuned for recall. |
@@ -111,6 +111,8 @@ Monthly counts (2026):
 | 13 Nov 2026 | Arthur | Initial log created. Scope decisions S1–S6 recorded. |
 | 13 Nov 2026 | Arthur | Snapshot selection recorded: seed 20261113, mix 50/30/70, deadline-check result. Data finding on spreadsheet closing dates added. |
 | 13 Nov 2026 | Arthur | Q11 decided; Q8 note for the value rule; hard filter rule scope recorded. |
+| 13 Nov 2026 | Arthur | Q9 and Q10 decided. Schema, citation verifier and recommendation decisions B1 to B12 recorded. |
+| 14 Nov 2026 | Arthur | `eu_procedure` source decided; confidence rule proposed; KB-evidence gap and inbox order recorded. |
 
 ---
 
@@ -147,3 +149,58 @@ Every BT and OPP identifier in ingest/ted.py is from memory and unverified. Each
 `pipeline/filter.py` implements five rules: country, CPV, deadline, value and notice type. Main nature (BT-23) is a flag `nature_supplies`, not a fail, because software packages (CPV 48) are often classed as supplies. Security clearance (BT-578) is deferred until the parser reads it. Working days count Monday to Friday; Dutch public holidays are not counted.
 
 | 13 Nov 2026 | public-xml returns 200 with credentials (430496, 430969). The earlier 403 came from swapped user and password in .env. TenderNed returns 403, not 401, for wrong credentials. | Q1: XML access confirmed. Drop the public-xml question from the TenderNed email; keep the terms question. Don’t read a 403 as a permission problem. |
+
+---
+
+## Schemas, citation verifier and recommendation rules (13 Nov 2026)
+
+Decisions taken while planning `pipeline/schemas.py`, `pipeline/citations.py` and the recommendation rules in `pipeline/memo.py`. All decided by Arthur.
+
+| # | Decision |
+|---|---|
+| B1 | Schemas live in `pipeline/schemas.py`. The citation verifier lives in `pipeline/citations.py`, because chat needs it too. |
+| B2 | Four recommendation values: `bid`, `bid_conditional`, `no_bid`, `needs_review`, with the bands of the memo template. |
+| B3 | Code decides the recommendation; the model proposes none and writes only the one-sentence reason. Knock-out rules first, then the fit score over its provisional range. A range across a band gives `needs_review` with `awaiting_human_scores`, and is recomputed when the human scores are entered. |
+| B4 | `not_met` with no mitigation gives `no_bid` and wins over `unclear` elsewhere. If that knock-out's own citation is unverified, `needs_review`. A closable gap (`consortium`, `subcontractor`, `third_party`, `obtain_before_deadline`) caps the result at `bid_conditional`; the fit score can still lower it. `ask_in_qa` gives `needs_review`, because the outcome depends on the buyer. |
+| B5 | A citation is checked on the cited page only, for v1. Quotes across a page break fail and are counted as false negatives in the evals. |
+| B6 | `Memo` is the stored shape. The model-facing draft schema is defined before the memo prompt. |
+| B7 | Code overwrites the memo's submission deadline from `tenders.deadline_at`; null shows as "unknown". A difference from the extracted value adds `deadline_differs_from_documents` to `limitations`. |
+| B8 | `RequirementMatch` validators: `met` needs evidence, `unclear` needs `unclear_reason`, `not_met` needs `gap`. The downgrade lives in `pipeline/match.py` and uses `no_evidence_found`. |
+| B9 | Code builds `Memo.citations` as the de-duplicated union; counts come from it. |
+| B10 | A quote needs at least 10 letters or digits after normalisation. |
+| B11 | A knock-out with no match gives `needs_review`. |
+| B12 | Documents are missing when the status is `docs_unavailable` or every document is scanned or unsupported. A rule for a missing key document comes after document classification (Day 8 to 9). |
+
+Also decided:
+
+- Each key date has its own citation.
+- The exclusion flag `none` excludes real flags.
+- Requirement identifiers are `KO-01` everywhere.
+- KB evidence quotes will be verified against the company KB later.
+- A copilot fit dimension with no usable source is unscored and treated as a range, like an unscored human dimension.
+- `memos.fit_score` is nullable, with a provisional minimum and maximum.
+- `[human]` memo items get their own table (`memo_human_inputs`), built on Day 7.
+
+Added 14 Nov 2026:
+
+| Item | Status | Decision |
+|---|---|---|
+| `eu_procedure` | Decided | From TenderNed `nationaalOfEuropeesCode` on the publication detail (`tenders.tenderned_detail`). Null when there is no TenderNed match. Code values and their mapping to true or false still to confirm. |
+| `Memo.confidence` | Proposed | Set by code after the recommendation, never by the model, and not an input to the recommendation. Rule below. Not built. |
+| Inbox order while `fit_score` is null | Open | Decide when the Streamlit UI is built. |
+
+Proposed confidence rule:
+
+| Value | When |
+|---|---|
+| `low` | Any one of these: documents missing; no knock-outs extracted; any knock-out citation unverified; a quarter or more of `Memo.citations` unverified; an extraction warning about a key document (scanned, token budget reached) |
+| `high` | All of these: every knock-out matched with both citations verified; no knock-out `unclear`; all four copilot fit dimensions scored; every citation in `Memo.citations` verified; no extraction warnings |
+| `medium` | Everything else |
+
+The quarter threshold is a first guess, to be set from the evals.
+
+Known gaps:
+
+- KB evidence counts as a source for a copilot fit score without being verified. `compute_fit` drops a score only when its sole source is an unverified tender citation. Stays a gap until KB evidence is verified against `company_kb`.
+
+Still open: the inbox order while `fit_score` is null (until the UI); confirmation of the confidence rule; Q8 (memo per tender or per lot).

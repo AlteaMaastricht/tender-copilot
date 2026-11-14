@@ -13,6 +13,9 @@ dependencies = [
     "uvicorn==0.54.0",
     # Pinned to the newest release older than two weeks (2.14.3, released 5 Nov 2026, is newer).
     "pydantic==2.14.2",
+    # Provider SDKs, imported only in llm/providers/. Newest releases before the lock cutoff.
+    "anthropic==2.3.0",
+    "mistralai==3.6.0",
 ]
 
 [project.optional-dependencies]
@@ -23,7 +26,9 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["ingest", "rag", "llm", "pipeline", "agent", "jobs", "app", "crm", "evals"]
+packages = [
+    "ingest", "rag", "llm", "llm.providers", "pipeline", "agent", "jobs", "app", "crm", "evals",
+]
 
 [tool.uv]
 # Only packages released before this date are resolved (two-week rule in CLAUDE.md / DECISIONS.md).

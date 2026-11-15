@@ -94,6 +94,7 @@ class KeyDates(BaseModel):
     # Graded against TenderNed `sluitingsDatum` only. Never shown in a memo.
     submission_deadline: KeyDateTime | None
     questions_deadline: KeyDateTime | None
+    qa_publications: list[KeyDate] = []  # planned Nota van Inlichtingen dates
     site_visit: KeyDateTime | None = None
     presentation: KeyDateTime | None = None  # presentation, interview or demo
     award_expected: KeyDate | None = None
@@ -128,6 +129,9 @@ RequirementCategory = Literal[
     "other",
 ]
 KnockoutKind = Literal["exclusion", "suitability", "minimum_requirement", "formal"]
+# Formal requirements are actions in the bid (sign a form, use a format). They are not matched
+# against company evidence and are ignored by the recommendation rules.
+UNMATCHED_KINDS: frozenset[str] = frozenset({"formal"})
 ProofWhen = Literal["uea", "with_bid", "on_request"]
 AwardBasis = Literal["bpkv", "lowest_price", "lowest_cost"]
 Framework = Literal["none", "single", "multi"]
@@ -163,6 +167,35 @@ class AwardCriterion(BaseModel):
     citation: Citation
 
 
+class KnockoutFinding(BaseModel):
+    """A knock-out as found in one run of pages (map step). No identifier yet."""
+
+    category: RequirementCategory
+    kind: KnockoutKind
+    text: str = Field(description="The requirement restated in one sentence")
+    threshold: str | None = Field(
+        description="Number, date or named standard, e.g. 'EUR 1,000,000 per year'"
+    )
+    proof: str | None = Field(description="The evidence the buyer asks for")
+    proof_when: ProofWhen | None
+    applies_to_lots: list[str] = []  # empty means all lots
+    consortium_allowed: bool | None  # may be met jointly or via a third party
+    disproportionate: bool = False  # looks disproportionate (Gids Proportionaliteit)
+    citation: Citation
+
+
+class ExtractionPartial(BaseModel):
+    """Output of one map call. Every part may be empty."""
+
+    key_dates: KeyDates
+    lots: list[LotScope]
+    framework: Framework | None
+    knockout_criteria: list[KnockoutFinding]
+    award_basis: AwardBasis | None
+    award_criteria: list[AwardCriterion]
+    contract_risks: list[CitedText]
+
+
 class ExtractionOutput(BaseModel):
     key_dates: KeyDates
     lots: list[LotScope]
@@ -170,7 +203,7 @@ class ExtractionOutput(BaseModel):
     knockout_criteria: list[KnockoutCriterion]
     award_basis: AwardBasis | None
     award_criteria: list[AwardCriterion]
-    contract_risks: list[str] = Field(description="Liability, penalties, IP, exit terms")
+    contract_risks: list[CitedText] = Field(description="Liability, penalties, IP, exit terms")
     documents_read: list[int]
     documents_skipped: list[int]
     warnings: list[str] = Field(description="E.g. scanned document, token budget reached")
@@ -333,18 +366,29 @@ class MemoDeadlines(BaseModel):
     contract_start: KeyDate | None = None
 
 
+KnockoutRowStatus = Literal["met", "not_met", "unclear", "action_required"]
+
+
 class KnockoutRow(BaseModel):
     requirement_id: str = Field(pattern=KO_ID_PATTERN)
     requirement: str
     kind: KnockoutKind
     proof: str | None
     proof_when: ProofWhen | None
-    status: MatchStatus
+    status: KnockoutRowStatus  # action_required: a formal requirement, never matched
     evidence: list[KbEvidence]
     gap: str | None
     mitigation: Mitigation
     disproportionate: bool = False
     tender_citation: Citation
+
+    @model_validator(mode="after")
+    def _formal_rows_are_actions(self) -> Self:
+        if (self.kind in UNMATCHED_KINDS) != (self.status == "action_required"):
+            raise ValueError("a formal knock-out has status 'action_required', and only it does")
+        if self.status == "action_required" and (self.evidence or self.mitigation != "none"):
+            raise ValueError("an 'action_required' row has no evidence and mitigation 'none'")
+        return self
 
 
 class AwardRow(BaseModel):
@@ -424,3 +468,60 @@ class Memo(BaseModel):
     documents_reviewed: list[ReviewedDocument]
     citations: list[Citation]  # de-duplicated union of all citations above, built by code
     limitations: list[str]  # e.g. "documents not accessible", "2 citations unverified"
+
+
+# --- 5.4 model-facing memo schemas ---------------------------------------------
+# What the two memo calls return. Only `[copilot]` items that extraction and matching have
+# not already produced; code builds the stored `Memo` from these.
+
+CopilotFitName = Literal["scope_match", "references", "capacity_timing", "contract_risk"]
+
+
+class FitDraft(BaseModel):
+    name: CopilotFitName
+    score: int | None = Field(ge=1, le=5)  # None: no source, no guess
+    rationale: str | None = Field(max_length=400)
+    citation: Citation | None
+    kb_evidence: list[KbEvidence] = []
+
+    @model_validator(mode="after")
+    def _score_needs_source(self) -> Self:
+        if self.score is not None:
+            if not (self.rationale and self.rationale.strip()):
+                raise ValueError("a score needs a rationale")
+            if self.citation is None and not self.kb_evidence:
+                raise ValueError("a score needs a citation or KB evidence")
+        return self
+
+
+class AwardPosition(BaseModel):
+    criterion_id: str = Field(pattern=r"^AC-\d{2,}$")  # numbered by code in the memo input
+    position: Level | None  # None: no basis to judge
+    win_theme: str | None = Field(max_length=300)
+    evidence: list[KbEvidence] = []
+
+
+class MemoDraft(BaseModel):
+    """Output of the first memo call (`memo_v1`)."""
+
+    summary: str = Field(max_length=1200)
+    target_lots: list[str]
+    fit: list[FitDraft]
+    price_quality_tradeoff: str | None
+    award_positions: list[AwardPosition]
+    risks: list[RiskRow]
+    questions_for_qa: list[QaQuestion]
+
+    @model_validator(mode="after")
+    def _four_copilot_dimensions(self) -> Self:
+        if sorted(d.name for d in self.fit) != sorted(get_args(CopilotFitName)):
+            raise ValueError("fit needs each of the four copilot dimensions exactly once")
+        return self
+
+
+class MemoReason(BaseModel):
+    """Output of the second memo call (`memo_reason_v1`), written for the decided value."""
+
+    recommendation_reason: str = Field(max_length=600)
+    reasons: list[str] = Field(max_length=3)
+    conditions: list[str]

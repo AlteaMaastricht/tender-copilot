@@ -3,26 +3,36 @@
 from __future__ import annotations
 
 import inspect
+import json
 from datetime import date, datetime
 from decimal import Decimal
+from typing import get_args
 
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from agent.tools import contact_keys
 from pipeline import schemas
-from pipeline.memo import compute_fit
+from pipeline.memo import FIT_WEIGHTS, compute_fit
 from pipeline.schemas import (
     AwardCriterion,
+    AwardPosition,
     Citation,
+    CopilotFitName,
     ExtractionOutput,
+    ExtractionPartial,
     FitDimension,
+    FitDraft,
     FitScore,
     KbEvidence,
     KeyDates,
     KeyDateTime,
     KnockoutCriterion,
+    KnockoutFinding,
     MatchingOutput,
     Memo,
+    MemoDraft,
+    MemoReason,
     RequirementMatch,
     ScreeningOutput,
 )
@@ -101,7 +111,7 @@ def extraction(**overrides) -> dict:
         "knockout_criteria": [knockout()],
         "award_basis": "bpkv",
         "award_criteria": [award(subcriteria=[award(name="Risicodossier", weight_pct=20)])],
-        "contract_risks": ["Unlimited liability"],
+        "contract_risks": [{"text": "Unlimited liability", "citation": citation()}],
         "documents_read": [1, 2],
         "documents_skipped": [3],
         "warnings": [],
@@ -454,6 +464,27 @@ def test_memo_rejects(bad):
         Memo(**memo(**bad))
 
 
+def test_a_formal_knockout_row_has_status_action_required_and_only_it_does():
+    row = memo()["knockout_table"][0]
+    formal = {**row, "kind": "formal", "status": "action_required", "evidence": []}
+    assert Memo(**memo(knockout_table=[row, formal])).knockout_table[1].status == (
+        "action_required"
+    )
+    for bad in (
+        {**row, "kind": "formal"},  # formal but matched
+        {**row, "status": "action_required", "evidence": []},  # not formal
+        {**formal, "evidence": [kb_evidence()]},
+        {**formal, "mitigation": "consortium"},
+    ):
+        with pytest.raises(ValidationError):
+            Memo(**memo(knockout_table=[bad]))
+
+
+def test_the_model_can_never_answer_action_required():
+    with pytest.raises(ValidationError):
+        RequirementMatch(**match(status="action_required"))
+
+
 def test_memo_row_identifiers():
     data = memo()
     data["risks"][0]["risk_id"] = "R-1"
@@ -493,6 +524,25 @@ EXPECTED_FIELDS = {
         "mitigation", "unclear_reason",
     ],
     MatchingOutput: ["matches", "award_notes"],
+    KeyDates: [
+        "submission_deadline", "questions_deadline", "qa_publications", "site_visit",
+        "presentation", "award_expected", "standstill_end", "tender_validity", "contract_start",
+    ],
+    KnockoutFinding: [
+        "category", "kind", "text", "threshold", "proof", "proof_when", "applies_to_lots",
+        "consortium_allowed", "disproportionate", "citation",
+    ],
+    ExtractionPartial: [
+        "key_dates", "lots", "framework", "knockout_criteria", "award_basis", "award_criteria",
+        "contract_risks",
+    ],
+    FitDraft: ["name", "score", "rationale", "citation", "kb_evidence"],
+    AwardPosition: ["criterion_id", "position", "win_theme", "evidence"],
+    MemoDraft: [
+        "summary", "target_lots", "fit", "price_quality_tradeoff", "award_positions", "risks",
+        "questions_for_qa",
+    ],
+    MemoReason: ["recommendation_reason", "reasons", "conditions"],
     FitScore: ["dimensions", "total", "provisional_min", "provisional_max"],
     Memo: [
         "tender_id", "language", "tender", "summary", "lots", "target_lots", "framework",
@@ -553,3 +603,229 @@ def test_chat_answer():
     for bad in ({"answer": "x" * 2001}, {"in_scope": None}, {"citations": [{"page": 1}]}):
         with pytest.raises(ValidationError):
             ChatAnswer(**{**data, **bad})
+
+
+# --- Map step ------------------------------------------------------------------
+
+
+def partial(**overrides) -> dict:
+    return {
+        "key_dates": {"submission_deadline": None, "questions_deadline": None},
+        "lots": [],
+        "framework": None,
+        "knockout_criteria": [],
+        "award_basis": None,
+        "award_criteria": [],
+        "contract_risks": [],
+        **overrides,
+    }
+
+
+def test_an_empty_partial_is_valid():
+    parsed = ExtractionPartial(**partial())
+    assert parsed.knockout_criteria == [] and parsed.key_dates.qa_publications == []
+
+
+def test_a_finding_is_a_criterion_without_the_fields_the_reduce_step_sets():
+    only_in_criterion = set(KnockoutCriterion.model_fields) - set(KnockoutFinding.model_fields)
+    assert only_in_criterion == {"requirement_id", "overridden_by_qa"}
+    assert set(KnockoutFinding.model_fields) < set(KnockoutCriterion.model_fields)
+    finding = {k: v for k, v in knockout().items() if k != "requirement_id"}
+    parsed = ExtractionPartial(**partial(knockout_criteria=[finding]))
+    assert parsed.knockout_criteria[0].threshold == "ISO 27001"
+    with pytest.raises(ValidationError):  # a finding has no citation to check
+        ExtractionPartial(**partial(knockout_criteria=[{**finding, "citation": None}]))
+
+
+@pytest.mark.parametrize("model", [ExtractionPartial, ExtractionOutput], ids=lambda m: m.__name__)
+def test_a_contract_risk_needs_a_citation(model):
+    data = partial() if model is ExtractionPartial else extraction()
+    with pytest.raises(ValidationError):
+        model(**{**data, "contract_risks": ["Unlimited liability"]})
+    cited = {"text": "Unlimited liability", "citation": citation()}
+    assert model(**{**data, "contract_risks": [cited]}).contract_risks[0].citation.page == 3
+
+
+def test_planned_qa_dates_are_part_of_the_key_dates():
+    dated = {"value": "2027-02-01", "citation": citation()}
+    dates = KeyDates(submission_deadline=None, questions_deadline=None, qa_publications=[dated])
+    assert dates.qa_publications[0].value == date(2027, 2, 1)
+    with pytest.raises(ValidationError):
+        KeyDates(submission_deadline=None, questions_deadline=None, qa_publications=["soon"])
+
+
+# --- Model-facing memo schemas -------------------------------------------------
+
+COPILOT_DIMENSIONS = get_args(CopilotFitName)
+
+# Where each field of the stored Memo comes from. A new Memo field must be added here.
+MEMO_FIELD_SOURCE = {
+    "summary": "draft",
+    "target_lots": "draft",
+    "price_quality_tradeoff": "draft",
+    "risks": "draft",
+    "questions_for_qa": "draft",
+    "fit": "draft_and_code",  # FitDraft rows, then compute_fit
+    "award_table": "draft_and_code",  # AwardCriterion rows joined with AwardPosition
+    "recommendation_reason": "reason",
+    "reasons": "reason",
+    "conditions": "reason",
+    "lots": "carried",  # from extraction and matching, copied by code
+    "framework": "carried",
+    "award_basis": "carried",
+    "knockout_table": "carried",
+    "deadlines": "carried",  # the submission deadline inside it is code
+    "tender_id": "code",
+    "language": "code",
+    "tender": "code",
+    "recommendation": "code",
+    "recommendation_reason_codes": "code",
+    "confidence": "code",
+    "reflects_qa_document_ids": "code",
+    "documents_reviewed": "code",
+    "citations": "code",
+    "limitations": "code",
+}
+# Names of `[code]` items anywhere in the Memo. `verified` is on the shared Citation type.
+CODE_ITEMS = {
+    name for name, source in MEMO_FIELD_SOURCE.items() if source == "code"
+} | {
+    "total", "provisional_min", "provisional_max", "weight_pct", "scored_by",
+    "submission_deadline", "verified",
+}  # fmt: skip
+# The columns of `memo_human_inputs` (ARCHITECTURE.md section 3) and the approval fields.
+HUMAN_ITEMS = {
+    "incumbent", "fit_win_probability", "fit_commercial", "fit_strategic_value",
+    "fit_rationale", "milestones", "row_owners", "risk_overrides", "deadline_realistic",
+    "price_to_win", "bid_investment", "updated_by", "decided_by", "owner",
+}  # fmt: skip
+
+
+def fit_draft(name: str = "scope_match", **overrides) -> dict:
+    return {
+        "name": name,
+        "score": 4,
+        "rationale": "Core service.",
+        "citation": citation(),
+        "kb_evidence": [],
+        **overrides,
+    }
+
+
+def memo_draft(**overrides) -> dict:
+    return {
+        "summary": "A municipality buys a data platform.",
+        "target_lots": [],
+        "fit": [fit_draft(name) for name in COPILOT_DIMENSIONS],
+        "price_quality_tradeoff": None,
+        "award_positions": [
+            {"criterion_id": "AC-01", "position": "medium", "win_theme": None, "evidence": []}
+        ],
+        "risks": memo()["risks"],
+        "questions_for_qa": memo()["questions_for_qa"],
+        **overrides,
+    }
+
+
+def property_names(model: type[BaseModel]) -> set[str]:
+    """Every property name at any depth of the model's JSON schema."""
+    names: set[str] = set()
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            names.update(node.get("properties", {}))
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(model.model_json_schema())
+    return names
+
+
+def test_memo_draft_round_trip():
+    parsed = MemoDraft(**memo_draft())
+    assert MemoDraft.model_validate_json(parsed.model_dump_json()) == parsed
+    assert [d.name for d in parsed.fit] == list(COPILOT_DIMENSIONS)
+
+
+def test_every_memo_field_has_exactly_one_source():
+    assert set(MEMO_FIELD_SOURCE) == set(Memo.model_fields)
+    by_source = {
+        source: {name for name, s in MEMO_FIELD_SOURCE.items() if s == source}
+        for source in set(MEMO_FIELD_SOURCE.values())
+    }
+    draft, reason = set(MemoDraft.model_fields), set(MemoReason.model_fields)
+    assert draft == by_source["draft"] | {"fit", "award_positions"}
+    assert reason == by_source["reason"]
+    assert not (draft | reason) & (by_source["code"] | by_source["carried"])
+
+
+def test_the_model_facing_memo_schemas_hold_no_code_item():
+    # `Citation.verified` is the one exception: always overwritten by the citation check.
+    assert property_names(MemoDraft) & CODE_ITEMS == {"verified"}
+    assert property_names(MemoReason) & CODE_ITEMS == set()
+
+
+@pytest.mark.parametrize("model", [MemoDraft, MemoReason], ids=lambda m: m.__name__)
+def test_the_model_facing_memo_schemas_hold_no_human_item(model):
+    names = property_names(model)
+    assert not names & HUMAN_ITEMS
+    assert not [name for name in names if "owner" in name or "human" in name]
+
+
+def test_the_draft_scores_only_the_copilot_fit_dimensions():
+    copilot = [name for name, (_, scored_by) in FIT_WEIGHTS.items() if scored_by == "copilot"]
+    assert sorted(COPILOT_DIMENSIONS) == sorted(copilot)
+    as_json = MemoDraft.model_json_schema()
+    assert sorted(as_json["$defs"]["FitDraft"]["properties"]["name"]["enum"]) == sorted(copilot)
+    for human in set(FIT_WEIGHTS) - set(copilot):
+        assert f'"{human}"' not in json.dumps(as_json)
+
+
+@pytest.mark.parametrize("model", [MemoDraft, MemoReason], ids=lambda m: m.__name__)
+def test_the_model_facing_memo_schemas_hold_no_contact_field(model):
+    names = property_names(model)
+    assert contact_keys(dict.fromkeys(names)) == []
+    assert not [n for n in names if any(w in n for w in ("contact", "email", "phone", "person"))]
+
+
+def test_fit_draft_needs_a_rationale_and_a_source_for_a_score():
+    assert FitDraft(**fit_draft()).score == 4
+    unscored = fit_draft(score=None, rationale="Niet gevonden in stukken", citation=None)
+    assert FitDraft(**unscored).score is None
+    FitDraft(**fit_draft(citation=None, kb_evidence=[kb_evidence()]))
+    for bad in (
+        {"rationale": None},
+        {"rationale": "  "},
+        {"citation": None},
+        {"score": 0},
+        {"score": 6},
+        {"name": "win_probability"},
+        {"rationale": "x" * 401},
+    ):
+        with pytest.raises(ValidationError):
+            FitDraft(**fit_draft(**bad))
+
+
+def test_memo_draft_needs_each_copilot_dimension_exactly_once():
+    four = [fit_draft(name) for name in COPILOT_DIMENSIONS]
+    for bad in (four[:3], [*four, four[0]], [*four[:3], four[0]], []):
+        with pytest.raises(ValidationError, match="four copilot dimensions"):
+            MemoDraft(**memo_draft(fit=bad))
+
+
+def test_award_position_and_memo_reason_bounds():
+    AwardPosition(criterion_id="AC-12", position=None, win_theme=None)
+    for bad in ("AC-1", "KO-01", "ac-01"):
+        with pytest.raises(ValidationError):
+            AwardPosition(criterion_id=bad, position=None, win_theme=None)
+    with pytest.raises(ValidationError):
+        AwardPosition(criterion_id="AC-01", position="strong", win_theme=None)
+
+    reason = {"recommendation_reason": "KO-03 is not met.", "reasons": ["a"], "conditions": []}
+    assert MemoReason(**reason).conditions == []
+    for bad in ({"reasons": ["a", "b", "c", "d"]}, {"recommendation_reason": "x" * 601}):
+        with pytest.raises(ValidationError):
+            MemoReason(**{**reason, **bad})

@@ -222,7 +222,8 @@ TOOLS: dict[str, Tool] = {
         "Return exact structured facts about the company. Use this instead of search whenever "
         "a requirement states a number, a date or a named certificate: minimum turnover, "
         "insurance cover, certificate validity, headcount, or the number, value and year of "
-        "reference projects.",
+        "reference projects. Each fact comes with the kb_id, doc_slug and text of the "
+        "knowledge-base passage it was taken from; cite that passage as evidence.",
         GetCompanyFactsArgs,
         {
             "type": "object",

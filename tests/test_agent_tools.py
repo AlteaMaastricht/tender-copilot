@@ -110,7 +110,20 @@ def test_each_fake_tool_returns_the_documented_shape():
     assert {"kb_id", "doc_slug", "text"} <= set(kb)
 
     facts = results["get_company_facts"]
-    assert facts["turnover"]["2024"] == 4500000 and facts["headcount"] == 38
+    assert facts["turnover"]["value"]["2024"] == 4500000 and facts["headcount"]["value"] == 38
+
+
+def test_every_fact_names_the_kb_passage_it_was_taken_from():
+    backend = FakeBackend()
+    passages = {entry["kb_id"]: entry for entry in backend.kb}
+    result = json.loads(call(*BROAD_CALLS[-1], backend=backend).content)
+    assert set(result) == set(BROAD_CALLS[-1][1]["topics"])
+    for topic, facts in result.items():
+        for fact in facts if isinstance(facts, list) else [facts]:
+            assert set(fact) == {"value", "kb_id", "doc_slug", "text"}, topic
+            source = passages[fact["kb_id"]]  # a real KB passage, so it can be cited
+            assert (fact["doc_slug"], fact["text"]) == (source["doc_slug"], source["text"])
+    assert "kb_id" in TOOLS["get_company_facts"].spec.description
 
 
 def test_defaults_and_filters():
@@ -121,7 +134,8 @@ def test_defaults_and_filters():
     none = call("search_tender_docs", {"tender_id": TENDER_ID, "query": "de", "doc_types": ["qa"]})
     assert json.loads(none.content) == {"passages": []}
     one = call("get_company_facts", {"topics": ["headcount"]})
-    assert json.loads(one.content) == {"headcount": 38}
+    assert list(json.loads(one.content)) == ["headcount"]
+    assert json.loads(one.content)["headcount"]["value"] == 38
 
 
 # --- tender binding ----------------------------------------------------------------

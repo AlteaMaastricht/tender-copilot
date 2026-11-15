@@ -71,15 +71,47 @@ class FakeBackend:
                 "doc_type": "reference",
                 "text": "Dataplatform voor een waterschap, opgeleverd in 2024, EUR 400.000.",
             },
+            {
+                "kb_id": 10,
+                "doc_slug": "financieel-jaarcijfers",
+                "doc_type": "financial",
+                "text": "Jaaromzet: 2023 EUR 4.200.000, 2024 EUR 4.500.000, 2025 EUR 5.100.000.",
+            },
+            {
+                "kb_id": 11,
+                "doc_slug": "verzekeringen",
+                "doc_type": "insurance",
+                "text": "Beroepsaansprakelijkheid verzekerd tot EUR 2.500.000, "
+                "geldig tot 2027-01-01.",
+            },
+            {
+                "kb_id": 12,
+                "doc_slug": "bedrijfsprofiel",
+                "doc_type": "profile",
+                "text": "Datalink B.V. is een besloten vennootschap met 38 medewerkers. "
+                "Werktalen: Nederlands en Engels.",
+            },
         ]
+        # Every fact carries the KB passage it was taken from (decision of 14 Nov 2026).
         self.facts = {
-            "turnover": {"2023": 4200000, "2024": 4500000, "2025": 5100000},
-            "insurance": {"professional_liability_eur": 2500000, "valid_until": "2027-01-01"},
-            "certifications": [{"name": "ISO 27001", "valid_until": "2028-06-30"}],
-            "headcount": 38,
-            "references": [{"slug": "reference-waterschap", "year": 2024, "value_eur": 400000}],
-            "legal_status": "besloten vennootschap",
-            "languages": ["nl", "en"],
+            "turnover": self._fact(10, {"2023": 4200000, "2024": 4500000, "2025": 5100000}),
+            "insurance": self._fact(
+                11, {"professional_liability_eur": 2500000, "valid_until": "2027-01-01"}
+            ),
+            "certifications": [self._fact(7, {"name": "ISO 27001", "valid_until": "2028-06-30"})],
+            "headcount": self._fact(12, 38),
+            "references": [self._fact(8, {"year": 2024, "value_eur": 400000})],
+            "legal_status": self._fact(12, "besloten vennootschap"),
+            "languages": self._fact(12, ["nl", "en"]),
+        }
+
+    def _fact(self, kb_id: int, value: Any) -> dict[str, Any]:
+        [entry] = [entry for entry in self.kb if entry["kb_id"] == kb_id]
+        return {
+            "value": value,
+            "kb_id": kb_id,
+            "doc_slug": entry["doc_slug"],
+            "text": entry["text"],
         }
 
     def get_tender(self, tender_id: int) -> dict[str, Any]:

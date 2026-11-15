@@ -51,6 +51,7 @@ Company KB ──(embedded once)──►  6 extract ──► 7 match (agent lo
 | `pipeline/extract.py` | Stage 2 extraction (map over sections, then merge). |
 | `pipeline/match.py` | Requirement matching; one agent loop per requirement. |
 | `pipeline/schemas.py` | The Pydantic models of section 5, shared by every step and passed to the gateway for validation. |
+| `pipeline/prompt_specs.py` | Which prompt file, stage, schema, trusted variables and company sections each step uses; reads numbered sections from `docs/COMPANY.md`. |
 | `pipeline/citations.py` | Citation verifier: is the quote on the cited page? Pure code, used by the memo step and by chat. |
 | `pipeline/memo.py` | Memo generation, fit score, recommendation rules. |
 | `agent/loop.py`, `agent/tools.py` | Hand-written loop (max steps, tool errors returned to the model, token budget); tool definitions, argument checks and the contact-data guard. `agent/fakes.py` is a fake tool backend until the database exists. |
@@ -58,7 +59,7 @@ Company KB ──(embedded once)──►  6 extract ──► 7 match (agent lo
 | `app/` | Streamlit: inbox, memo view, chat per tender, approve/reject. |
 | `crm/hubspot.py` | Creates the deal from an approved memo. |
 | `evals/` | Datasets (JSONL, in git), runners, results. |
-| `prompts/` | Versioned prompt files (`screen_v1.md`, `extract_v1.md`, ...). |
+| `prompts/` | Versioned prompt files: `screen_v1`, `extract_map_v1`, `extract_reduce_v1`, `match_v1`, `memo_v1`, `memo_reason_v1`, `chat_v1`, and the gateway blocks. |
 
 ### 2.2 Daily job
 
@@ -101,7 +102,7 @@ The outcome is recorded in `filter_result`, for example `{"deadline": {"outcome"
 
 ### 2.4 Screening (Stage 1)
 
-One call per tender with a small model. Input: redacted notice title, description, lot titles, CPV labels, buyer type, value, and sections 2, 4 and 5 of the company profile. Output: `ScreeningOutput` (section 5.1). No tools, no documents.
+One call per tender with a small model. Input: redacted notice title, description, lot titles, CPV labels, buyer type, value, the flags set by the hard filter, and sections 2, 4 and 5 of the company profile. Output: `ScreeningOutput` (section 5.1). No tools, no documents.
 
 ### 2.5 Deep analysis (Stage 2)
 
@@ -113,10 +114,12 @@ One call per tender with a small model. Input: redacted notice title, descriptio
 
 **Match.**
 - For each knock-out criterion, one short agent loop (max 6 steps) with the tools in section 4. It ends with a `RequirementMatch`.
+- Formal knock-outs (kind `formal`: sign a form, use a format, submit on time) are actions in the bid, not matched. They appear in the memo's knock-out table with status `action_required` and are ignored by the recommendation rules.
 - Numeric and date requirements (turnover, insurance cover, certificate validity, number of references) use `get_company_facts`, not vector search.
 - Award criteria are not matched as met or not met. They get a short strength note for the memo.
 
 **Memo.**
+- Two model calls: the draft, then the reason for the decided value (section 5.4). Before the draft call, code fetches KB passages (profile, references, certifications, policy; no CVs) and company facts and passes them as data.
 - Fit score: the model scores four of the seven dimensions from 1 to 5, each with a rationale and a source. The bid team scores the other three in the UI. Code computes the total and the range it can still reach (section 5.4).
 - Recommendation: decided in code from the knock-out results and the fit score (section 5.4). The model writes only the one-sentence reason.
 - Citation check (`pipeline/citations.py`): the quote must be one contiguous piece of the text of the cited page. Neighbouring pages are not searched, so a quote that runs over a page break fails; the evals count these as false negatives.
@@ -547,7 +550,7 @@ Removed from the PLAN.md list:
 ```json
 {
   "name": "get_company_facts",
-  "description": "Return exact structured facts about the company. Use this instead of search whenever a requirement states a number, a date or a named certificate: minimum turnover, insurance cover, certificate validity, headcount, or the number, value and year of reference projects.",
+  "description": "Return exact structured facts about the company. Use this instead of search whenever a requirement states a number, a date or a named certificate: minimum turnover, insurance cover, certificate validity, headcount, or the number, value and year of reference projects. Each fact comes with the kb_id, doc_slug and text of the knowledge-base passage it was taken from; cite that passage as evidence.",
   "input_schema": {
     "type": "object",
     "properties": {
@@ -676,6 +679,7 @@ class KeyDates(BaseModel):
     # Graded against TenderNed `sluitingsDatum` only. Never shown in a memo.
     submission_deadline: KeyDateTime | None
     questions_deadline: KeyDateTime | None
+    qa_publications: list[KeyDate] = []  # planned Nota van Inlichtingen dates
     site_visit: KeyDateTime | None = None
     presentation: KeyDateTime | None = None  # presentation, interview or demo
     award_expected: KeyDate | None = None
@@ -710,6 +714,9 @@ RequirementCategory = Literal[
     "other",
 ]
 KnockoutKind = Literal["exclusion", "suitability", "minimum_requirement", "formal"]
+# Formal requirements are actions in the bid (sign a form, use a format). They are not matched
+# against company evidence and are ignored by the recommendation rules.
+UNMATCHED_KINDS: frozenset[str] = frozenset({"formal"})
 ProofWhen = Literal["uea", "with_bid", "on_request"]
 AwardBasis = Literal["bpkv", "lowest_price", "lowest_cost"]
 Framework = Literal["none", "single", "multi"]
@@ -745,6 +752,35 @@ class AwardCriterion(BaseModel):
     citation: Citation
 
 
+class KnockoutFinding(BaseModel):
+    """A knock-out as found in one run of pages (map step). No identifier yet."""
+
+    category: RequirementCategory
+    kind: KnockoutKind
+    text: str = Field(description="The requirement restated in one sentence")
+    threshold: str | None = Field(
+        description="Number, date or named standard, e.g. 'EUR 1,000,000 per year'"
+    )
+    proof: str | None = Field(description="The evidence the buyer asks for")
+    proof_when: ProofWhen | None
+    applies_to_lots: list[str] = []  # empty means all lots
+    consortium_allowed: bool | None  # may be met jointly or via a third party
+    disproportionate: bool = False  # looks disproportionate (Gids Proportionaliteit)
+    citation: Citation
+
+
+class ExtractionPartial(BaseModel):
+    """Output of one map call. Every part may be empty."""
+
+    key_dates: KeyDates
+    lots: list[LotScope]
+    framework: Framework | None
+    knockout_criteria: list[KnockoutFinding]
+    award_basis: AwardBasis | None
+    award_criteria: list[AwardCriterion]
+    contract_risks: list[CitedText]
+
+
 class ExtractionOutput(BaseModel):
     key_dates: KeyDates
     lots: list[LotScope]
@@ -752,7 +788,7 @@ class ExtractionOutput(BaseModel):
     knockout_criteria: list[KnockoutCriterion]
     award_basis: AwardBasis | None
     award_criteria: list[AwardCriterion]
-    contract_risks: list[str] = Field(description="Liability, penalties, IP, exit terms")
+    contract_risks: list[CitedText] = Field(description="Liability, penalties, IP, exit terms")
     documents_read: list[int]
     documents_skipped: list[int]
     warnings: list[str] = Field(description="E.g. scanned document, token budget reached")
@@ -761,6 +797,10 @@ class ExtractionOutput(BaseModel):
 - Each key date carries its own citation.
 - `KeyDates.submission_deadline` is kept for grading only (6.1). A memo never shows it.
 - Requirement identifiers are `KO-01`, `KO-02`, ... everywhere.
+- A map call returns `ExtractionPartial`; the reduce call returns `ExtractionOutput`. A `KnockoutFinding` is a criterion without `requirement_id` and `overridden_by_qa`, which only the reduce step can set.
+- After the reduce call, code overwrites `documents_read` and `documents_skipped`, renumbers `requirement_id` in order, adds its own warnings, and marks as unverified any citation that is not one of the partials' citations.
+- Each contract risk carries a citation, so that a risk row in the memo has a source.
+- `KeyDateTime` cannot hold a date without a time. The v1 prompt writes 00:00 and the reduce step adds a warning.
 
 ### 5.3 Requirement-match output
 
@@ -824,9 +864,13 @@ When the agent loop stops without an answer, `pipeline/match.py` builds the matc
 | Model call failed (refusal, truncated output, invalid answer twice, provider error) | `loop_failed` |
 | `met` without evidence, twice | `no_evidence_found` |
 
+`award_notes` is empty in v1. Award positions are written in the memo draft (5.4).
+
+`RequirementMatch.status` has no `action_required`: a model never produces it. Formal knock-outs are not matched (`needs_matching` in `pipeline/match.py`); code builds their `KnockoutRow` with status `action_required`, no evidence and mitigation `none`.
+
 ### 5.4 Memo
 
-`Memo` is the stored shape (`memos.content`). It covers every `[copilot]` and `[code]` item of `docs/MEMO_TEMPLATE.md`. It is not a model output shape: the model-facing draft schema is defined separately, before the memo prompt is written. `[human]` items are stored in `memo_human_inputs` (section 3).
+`Memo` is the stored shape (`memos.content`). It covers every `[copilot]` and `[code]` item of `docs/MEMO_TEMPLATE.md`. It is not a model output shape. The model returns `MemoDraft` and `MemoReason` (below, "Model-facing memo schemas") and code builds the `Memo`. `[human]` items are stored in `memo_human_inputs` (section 3).
 
 ```python
 FitDimensionName = Literal[
@@ -923,18 +967,29 @@ class MemoDeadlines(BaseModel):
     contract_start: KeyDate | None = None
 
 
+KnockoutRowStatus = Literal["met", "not_met", "unclear", "action_required"]
+
+
 class KnockoutRow(BaseModel):
     requirement_id: str = Field(pattern=KO_ID_PATTERN)
     requirement: str
     kind: KnockoutKind
     proof: str | None
     proof_when: ProofWhen | None
-    status: MatchStatus
+    status: KnockoutRowStatus  # action_required: a formal requirement, never matched
     evidence: list[KbEvidence]
     gap: str | None
     mitigation: Mitigation
     disproportionate: bool = False
     tender_citation: Citation
+
+    @model_validator(mode="after")
+    def _formal_rows_are_actions(self) -> Self:
+        if (self.kind in UNMATCHED_KINDS) != (self.status == "action_required"):
+            raise ValueError("a formal knock-out has status 'action_required', and only it does")
+        if self.status == "action_required" and (self.evidence or self.mitigation != "none"):
+            raise ValueError("an 'action_required' row has no evidence and mitigation 'none'")
+        return self
 
 
 class AwardRow(BaseModel):
@@ -1039,10 +1094,10 @@ Filled by code, never by the model: `tender`, `deadlines.submission_deadline`, `
 - An unscored dimension, human or copilot, counts 1 for `provisional_min` and 5 for `provisional_max`. `total` is null until all seven are scored.
 - When the human scores are entered, the fit score and the recommendation are computed again.
 
-**Recommendation rules** (`decide_recommendation` in `pipeline/memo.py`). The model proposes no value; it writes only `recommendation_reason`. Rules are applied in this order:
+**Recommendation rules** (`decide_recommendation` in `pipeline/memo.py`). The model proposes no value; it writes only `recommendation_reason`. Formal knock-outs are ignored by every rule: a "knock-out" below means one of kind `exclusion`, `suitability` or `minimum_requirement`. A match for a formal knock-out counts as a match without a knock-out. Rules are applied in this order:
 
 1. Documents missing (status `docs_unavailable`, or every document scanned or unsupported): `needs_review`.
-2. No knock-out criteria extracted: `needs_review`.
+2. No knock-out criteria extracted, other than formal ones: `needs_review`.
 3. A knock-out `not_met` with mitigation `none`, with both its citations verified: `no_bid`. This wins over every rule below.
 4. Any of the following: `needs_review`.
    - a knock-out `unclear`
@@ -1060,10 +1115,83 @@ A knock-out citation is verified when both `KnockoutCriterion.citation` and `Req
 | Value | When |
 |---|---|
 | `low` | Any one of these: documents missing; no knock-outs extracted; any knock-out citation unverified; a quarter or more of `Memo.citations` unverified; an extraction warning about a key document (scanned, token budget reached) |
-| `high` | All of these: every knock-out matched with both citations verified; no knock-out `unclear`; all four copilot fit dimensions scored; every citation in `Memo.citations` verified; no extraction warnings |
+| `high` | All of these: every non-formal knock-out matched with both citations verified; no knock-out `unclear`; all four copilot fit dimensions scored; every citation in `Memo.citations` verified; no extraction warnings |
 | `medium` | Everything else |
 
 The quarter threshold is a first guess, to be set from the evals.
+
+**Model-facing memo schemas.** Two calls, both logged with stage `memo`. These classes are at the end of `pipeline/schemas.py`.
+
+```python
+CopilotFitName = Literal["scope_match", "references", "capacity_timing", "contract_risk"]
+
+
+class FitDraft(BaseModel):
+    name: CopilotFitName
+    score: int | None = Field(ge=1, le=5)  # None: no source, no guess
+    rationale: str | None = Field(max_length=400)
+    citation: Citation | None
+    kb_evidence: list[KbEvidence] = []
+
+    @model_validator(mode="after")
+    def _score_needs_source(self) -> Self:
+        if self.score is not None:
+            if not (self.rationale and self.rationale.strip()):
+                raise ValueError("a score needs a rationale")
+            if self.citation is None and not self.kb_evidence:
+                raise ValueError("a score needs a citation or KB evidence")
+        return self
+
+
+class AwardPosition(BaseModel):
+    criterion_id: str = Field(pattern=r"^AC-\d{2,}$")  # numbered by code in the memo input
+    position: Level | None  # None: no basis to judge
+    win_theme: str | None = Field(max_length=300)
+    evidence: list[KbEvidence] = []
+
+
+class MemoDraft(BaseModel):
+    """Output of the first memo call (`memo_v1`)."""
+
+    summary: str = Field(max_length=1200)
+    target_lots: list[str]
+    fit: list[FitDraft]
+    price_quality_tradeoff: str | None
+    award_positions: list[AwardPosition]
+    risks: list[RiskRow]
+    questions_for_qa: list[QaQuestion]
+
+    @model_validator(mode="after")
+    def _four_copilot_dimensions(self) -> Self:
+        if sorted(d.name for d in self.fit) != sorted(get_args(CopilotFitName)):
+            raise ValueError("fit needs each of the four copilot dimensions exactly once")
+        return self
+
+
+class MemoReason(BaseModel):
+    """Output of the second memo call (`memo_reason_v1`), written for the decided value."""
+
+    recommendation_reason: str = Field(max_length=600)
+    reasons: list[str] = Field(max_length=3)
+    conditions: list[str]
+```
+
+- `memo_v1` returns `MemoDraft`. It holds only `[copilot]` items that extraction and matching have not already produced; those are carried over by code, so the memo call cannot alter them. It has no `[code]` item, no `[human]` item and no contact field. The one exception is `Citation.verified`, which is on the shared citation type and is always overwritten.
+- Code then checks the draft, computes the fit score and decides the recommendation.
+- `memo_reason_v1` receives the decided value and the reason codes as trusted variables and returns `MemoReason`. `conditions` is kept only for `bid_conditional`.
+- A draft citation counts only when it equals a verified citation in the memo input. The memo calls see no page text.
+- `risk_id` and `question_id` are renumbered by code, and `linked_to` entries without a match are dropped. Award criteria are numbered `AC-01`, ... in the memo input only.
+- If the reason call fails, code writes a fixed sentence from the reason codes and adds `reason_not_written` to `limitations`.
+- The code that builds the memo input and assembles the `Memo` is not built yet.
+
+| `Memo` field | Source |
+|---|---|
+| `summary`, `target_lots`, `price_quality_tradeoff`, `risks`, `questions_for_qa` | `MemoDraft` |
+| `fit` | `compute_fit` over the four `FitDraft` rows and the human scores |
+| `award_table` | `AwardCriterion` rows joined with `AwardPosition` on `criterion_id` |
+| `recommendation_reason`, `reasons`, `conditions` | `MemoReason` |
+| `lots`, `framework`, `award_basis`, `knockout_table`, `deadlines` | extraction and matching, copied by code (the submission deadline is code) |
+| everything else | code |
 
 **EU or national.** `TenderFacts.eu_procedure` comes from TenderNed `nationaalOfEuropeesCode` on the publication detail (`tenders.tenderned_detail`), read when the memo is built; no extra column. Null when there is no TenderNed match. The code values and their mapping to true or false: **(confirm)**.
 
@@ -1165,7 +1293,7 @@ Model comparison: three providers on screening and on extraction plus matching, 
 10. Memo language: decided, always English. Questions for the Nota van Inlichtingen stay Dutch.
 11. Tenders above EUR 2M: drop, or keep with a "consortium only" flag as proposed?
 12. How many tenders may go to Stage 2 per day, and what is the daily cost cap?
-13. Should "unsure" from screening always be shortlisted, or only above a confidence level?
+13. "Unsure" from screening: decided, always shortlisted.
 
 **Privacy and compliance**
 14. Retention period for `contacts` and for stored model payloads.
@@ -1199,3 +1327,5 @@ Model comparison: three providers on screening and on extraction plus matching, 
 | Recommendation: bid, no-bid, needs review | Four values, with `bid_conditional`; decided in code | Matches the memo template |
 | Fit score (no formula) | Seven weighted dimensions, four scored by the model and three by a human, with a provisional range | Decision Q9 |
 | (not in plan) | `pipeline/schemas.py`, `pipeline/citations.py`, `memo_human_inputs` | Shared contracts; chat also verifies citations; human items need storage |
+| One memo call | Two memo calls: a draft, then the reason for the value that code decided | The reason must explain a value the model does not choose |
+| (not in plan) | `pipeline/prompt_specs.py`; map-step schema `ExtractionPartial`; contract risks with citations | One place ties prompt to schema; the map step had no schema; risks need a source |

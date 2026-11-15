@@ -51,7 +51,7 @@ Never record credentials here. Keep evidence (emails, screenshots, terms pages) 
 | Q10 | Memo language: Dutch, English, or the tender's language? | Decided | Always English. Questions for the Nota van Inlichtingen stay Dutch. | Decided 13 Nov 2026. |
 | Q11 | Tenders above EUR 2M: drop, or keep with "consortium only"? | Decided | Keep, with a 'consortium only' flag (hard filter: outcome pass, flag `consortium_only`). | Matches `COMPANY.md` section 4. |
 | Q12 | Tenders per day at Stage 2, and the daily cost cap? | Open | | Set after the Phase 3 cost measurements. |
-| Q13 | Should "unsure" screening results always be shortlisted? | Proposed | Yes. | Stage 1 is tuned for recall. |
+| Q13 | Should "unsure" screening results always be shortlisted? | Decided | Yes, always. No confidence threshold. `confidence` is used for ranking only. | Stage 1 is tuned for recall. Decided 14 Nov 2026. Revisit only if the screening eval shows that most "unsure" tenders are irrelevant. |
 
 ### Privacy and compliance
 
@@ -114,7 +114,9 @@ Monthly counts (2026):
 | 13 Nov 2026 | Arthur | Q9 and Q10 decided. Schema, citation verifier and recommendation decisions B1 to B12 recorded. |
 | 14 Nov 2026 | Arthur | `eu_procedure` source decided; confidence rule proposed; KB-evidence gap and inbox order recorded. |
 | 14 Nov 2026 | Arthur | LLM gateway decisions recorded; Q14 payload retention decided. |
-| 15 Nov 2026 | Arthur | Agent loop decisions recorded: limits, stop reasons, `ChatAnswer`. |
+| 14 Nov 2026 | Arthur | Agent loop decisions recorded: limits, stop reasons, `ChatAnswer`. |
+| 14 Nov 2026 | Arthur | Q13 decided. Prompt decisions recorded: seven v1 prompts, two memo calls, KB pre-fetch, model-facing memo schemas, map-step schema. |
+| 14 Nov 2026 | Arthur | Formal knock-outs are not matched (`action_required`); `get_company_facts` returns the `kb_id` of each fact. |
 
 ---
 
@@ -200,7 +202,7 @@ Proposed confidence rule:
 | Value | When |
 |---|---|
 | `low` | Any one of these: documents missing; no knock-outs extracted; any knock-out citation unverified; a quarter or more of `Memo.citations` unverified; an extraction warning about a key document (scanned, token budget reached) |
-| `high` | All of these: every knock-out matched with both citations verified; no knock-out `unclear`; all four copilot fit dimensions scored; every citation in `Memo.citations` verified; no extraction warnings |
+| `high` | All of these: every non-formal knock-out matched with both citations verified; no knock-out `unclear`; all four copilot fit dimensions scored; every citation in `Memo.citations` verified; no extraction warnings |
 | `medium` | Everything else |
 
 The quarter threshold is a first guess, to be set from the evals.
@@ -236,7 +238,7 @@ Open:
 
 ---
 
-## Agent loop (15 Nov 2026)
+## Agent loop (14 Nov 2026)
 
 | Topic | Decision |
 |---|---|
@@ -252,7 +254,37 @@ Candidate for the measured improvement in Phase 3: prompt caching for agent step
 
 Open:
 
-- `prompts/match_v1.md` and the chat prompt are not written yet.
 - A real model's resistance to injected instructions is untested; the tests only show that the loop gives such text no power. It belongs to the `edge_cases` eval suite.
 
 Whether a real model ignores injected instructions is tested in the Phase 3 edge cases.
+
+---
+
+## Prompts (14 Nov 2026)
+
+Seven v1 prompt files in `prompts/`, tied to their stage, schema and trusted variables in `pipeline/prompt_specs.py`. No prompt has been run against a model yet.
+
+| Topic | Decision |
+|---|---|
+| Files | `screen_v1`, `extract_map_v1`, `extract_reduce_v1`, `match_v1`, `memo_v1`, `memo_reason_v1`, `chat_v1`. |
+| Trusted and untrusted | A prompt variable holds only company profile text or a value that code produces (`tender_id`, `recommendation`, `reason_codes`). Tender text, notice text, extraction results and tool results are always passed as data. |
+| Company sections | Screening gets `COMPANY.md` sections 2, 4 and 5. The memo gets 2, 4, 5 and 9. Matching and chat reach sections 3, 6 and 7 only through the KB tools. Extraction gets none. |
+| Screening (Q13) | Tuned for recall: `reject` only when the notice itself shows a will-not-bid item as the main subject, or no service line can apply. `unsure` is always shortlisted. The prompt defines `confidence` as the likelihood that Datalink would want to read the documents; ranking only. |
+| Screening input | The flags of the hard filter are passed as data, so the model does not re-check country, CPV, deadline or value. |
+| Memo calls | Two. `memo_v1` returns `MemoDraft`. Code decides the recommendation. `memo_reason_v1` gets the decided value and reason codes and returns `MemoReason`. |
+| Memo draft | Only `[copilot]` items that extraction and matching have not already produced. Those are carried over by code. No `[code]` or `[human]` item and no contact field; `Citation.verified` is the one exception. |
+| KB for the memo | Code pre-fetches KB passages (no CVs) and company facts and passes them as data. `MatchingOutput.award_notes` stays empty in v1; award positions are in the draft. |
+| Citations | Only the map step and the two agent loops write new quotes. The reduce step and the memo calls copy citations from their input; any other citation is unverified. |
+| Language | English output. Questions for the Nota van Inlichtingen are Dutch. Chat answers in English, also to a Dutch question. |
+| Examples | Synthetic only: no organisation or person names, no real tender wording, IDs from 9001. Tests check this against the TED fixtures. |
+| Map step | New schema `ExtractionPartial` with `KnockoutFinding`. After the reduce call, code overwrites `documents_read`, `documents_skipped` and the requirement IDs. |
+| Schema changes | `contract_risks` is `list[CitedText]`, so a risk has a source. `KeyDates.qa_publications` added. |
+| Formal knock-outs | **Decided 14 Nov 2026.** Knock-outs of kind `formal` are not matched: `match_requirement` refuses them and `match_v1` is never sent one. They appear in the knock-out table with status `action_required` (`KnockoutRow` only; a model can never produce it), no evidence and mitigation `none`. `decide_recommendation` ignores them: only formal knock-outs counts as `no_knockouts_found`, and a match for a formal knock-out counts as `match_without_knockout`. This narrows B11 to non-formal knock-outs. Reason: a formal requirement has no company evidence, so it was always `unclear` and made every tender `needs_review`. |
+| Facts carry their source | **Decided 14 Nov 2026.** `get_company_facts` returns each fact as `value` plus the `kb_id`, `doc_slug` and `text` of the KB passage it was taken from (a list of such facts for certifications and references). The tool description says so (`ARCHITECTURE.md` section 4). `match_v1` cites the fact directly; the extra `search_company_kb` step is removed. The database backend must keep this shape: a fact without a `kb_id` cannot be cited. |
+
+Open:
+
+- `contract` documents are not read in full (section 2.5), so liability and penalty clauses reach the memo only when the leidraad repeats them.
+- `KeyDateTime` cannot hold a date without a time; v1 writes 00:00 with a warning.
+- CPV labels for the screening input need a lookup table.
+- The code that builds each prompt's input (`pipeline/screen.py`, `pipeline/extract.py`, the memo calls and assembly, the KB pre-fetch) is not built.

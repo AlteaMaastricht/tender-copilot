@@ -36,7 +36,7 @@
 
 **Target CPV codes:** 72* (IT services), 79* (business services, consulting), 48* (software packages), 73* (research and development services, only AI/data related)
 
-**Countries:** Netherlands (primary), Belgium and Germany (secondary, Dutch- and English-language tenders only)
+**Countries:** Netherlands only (decision S3). Tender documents in Dutch or English.
 
 **Contract value:** EUR 50,000 to EUR 2,000,000 total. Above EUR 2M only as a subcontractor or in a consortium.
 
@@ -50,8 +50,8 @@
 
 - Hardware or infrastructure supply (servers, laptops, networks)
 - Staffing-only contracts (detachering) without a defined deliverable
-- Tenders outside NL, BE and DE
-- Tenders requiring security clearance, on-site presence outside the Netherlands/Belgium/Germany, or 24/7 operations
+- Tenders outside the Netherlands
+- Tenders requiring security clearance, on-site presence outside the Netherlands, or 24/7 operations
 - Contracts with unlimited liability or liability above EUR 5M
 - Tenders with less than 10 working days between publication and submission deadline
 - Pure software development of a single custom application with no data or AI component

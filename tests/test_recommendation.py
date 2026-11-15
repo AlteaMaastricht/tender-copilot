@@ -331,3 +331,32 @@ def test_all_met_and_verified_follows_the_fit_band():
     assert decide(knockouts, matches, fit(5, 5)) == ("bid", ("fit_bid",))
     assert decide(knockouts, matches, fit(3, 3)) == ("bid_conditional", ("fit_bid_conditional",))
     assert decide(knockouts, matches, fit(2, 2)) == ("no_bid", ("fit_no_bid",))
+
+
+# --- formal knock-outs ---------------------------------------------------------
+
+
+def formal(n: int, *, verified: bool | None = True) -> KnockoutCriterion:
+    return ko(n, verified=verified).model_copy(update={"kind": "formal"})
+
+
+def test_a_formal_knockout_without_a_match_is_ignored():
+    assert decide([ko(1), formal(2)], [match(1)]) == ("bid", ("fit_bid",))
+
+
+def test_a_formal_knockout_with_an_unverified_citation_is_ignored():
+    assert decide([ko(1), formal(2, verified=None)], [match(1)]) == ("bid", ("fit_bid",))
+
+
+def test_only_formal_knockouts_count_as_none_found():
+    assert decide([formal(1), formal(2)], []) == ("needs_review", ("no_knockouts_found",))
+
+
+def test_a_match_for_a_formal_knockout_has_no_knockout_to_belong_to():
+    result = decide([ko(1), formal(2)], [match(1), match(2)])
+    assert result == ("needs_review", ("match_without_knockout",))
+
+
+def test_a_formal_knockout_cannot_hide_a_confirmed_gap():
+    matches = [match(1, "not_met")]
+    assert decide([ko(1), formal(2)], matches) == ("no_bid", ("knockout_not_met",))

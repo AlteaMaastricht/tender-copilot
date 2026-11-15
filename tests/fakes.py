@@ -84,12 +84,13 @@ def http_error(status: int | None, *, retry_after: float | None = None) -> Provi
 
 
 def make_prompts_dir(tmp_path: Path) -> Path:
-    """A prompts folder with the real gateway blocks and two small task prompts."""
+    """A prompts folder with the real gateway blocks and three small task prompts."""
     folder = tmp_path / "prompts"
     folder.mkdir()
     for source in PROMPTS_DIR.glob("gateway_*.md"):
         shutil.copy(source, folder / source.name)
     (folder / "screen_v1.md").write_text("You screen tenders for {{company}}.\n")
+    (folder / "match_v1.md").write_text("You match one requirement of tender {{tender_id}}.\n")
     (folder / "match_v2.md").write_text("You match one requirement against company evidence.\n")
     return folder
 

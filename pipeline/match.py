@@ -12,9 +12,10 @@ from agent.tools import MATCHING_TOOLS, ToolBackend
 from llm.client import CallContext, Gateway
 from llm.prompts import PromptRef, UntrustedText
 from llm.redact import Redactor
-from pipeline.schemas import KnockoutCriterion, RequirementMatch, UnclearReason
+from pipeline.prompt_specs import MATCH
+from pipeline.schemas import UNMATCHED_KINDS, KnockoutCriterion, RequirementMatch, UnclearReason
 
-MATCH_PROMPT = PromptRef("match", "v1")
+MATCH_PROMPT = MATCH.ref
 # The message of the RequirementMatch validator for `met` without evidence (decision B8).
 _NO_EVIDENCE = "needs at least one company_evidence"
 
@@ -24,6 +25,11 @@ _CAUSES: dict[str, tuple[UnclearReason, str]] = {
     "tool_errors": ("loop_failed", "too many tool errors"),
     "model_error": ("loop_failed", "the model call failed"),
 }
+
+
+def needs_matching(criterion: KnockoutCriterion) -> bool:
+    """Formal requirements are actions in the bid; they appear as `action_required` rows."""
+    return criterion.kind not in UNMATCHED_KINDS
 
 
 def match_requirement(
@@ -36,10 +42,14 @@ def match_requirement(
     context: CallContext,
     prompt: PromptRef = MATCH_PROMPT,
 ) -> RequirementMatch:
+    if not needs_matching(criterion):
+        raise ValueError(f"{criterion.requirement_id} is formal: it is an action, not matched")
     result = run_loop(
         gateway=gateway,
         task="matching",
         prompt=prompt,
+        # The tender ID is the run's own, set by code. The model needs it for tool calls.
+        variables={"tender_id": str(context.tender_id)},
         # The criterion was extracted from tender text, so it is passed as untrusted data.
         data=[UntrustedText("requirement", criterion.model_dump_json())],
         tools=MATCHING_TOOLS,

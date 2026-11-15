@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from agent.fakes import FakeBackend
-from llm.prompts import PromptRef
 from llm.providers.base import ToolCall, Usage
 from llm.redact import Redactor
 from pipeline.match import match_requirement
@@ -37,7 +36,6 @@ def run(tmp_path, *script) -> tuple[RequirementMatch, FakeProvider]:
         model=SONNET,
         redactor=Redactor(),
         context=CONTEXT,
-        prompt=PromptRef("match", "v2"),
     )
     return result, provider
 
@@ -49,6 +47,27 @@ def test_a_final_answer_is_returned_with_the_criterions_own_id(tmp_path):
     opening = provider.requests[0].messages[0].text
     assert 'label="requirement"' in opening and "KO-07" in opening
     assert "KO-07" not in provider.requests[0].system
+    # The tender ID is the run's own, set by code, so it is a trusted variable.
+    assert "of tender 42." in provider.requests[0].system and "tender 42" not in opening
+
+
+def test_a_formal_requirement_is_never_sent_to_the_model(tmp_path):
+    from pipeline.match import needs_matching
+
+    formal = KnockoutCriterion(**knockout(requirement_id="KO-08", kind="formal"))
+    provider = FakeProvider()
+    gateway, log = make_gateway(tmp_path, provider)
+    assert not needs_matching(formal) and needs_matching(CRITERION)
+    with pytest.raises(ValueError, match="formal"):
+        match_requirement(
+            formal,
+            gateway=gateway,
+            backend=FakeBackend(),
+            model=SONNET,
+            redactor=Redactor(),
+            context=CONTEXT,
+        )
+    assert provider.requests == [] and log.records == []
 
 
 STOPPED = {

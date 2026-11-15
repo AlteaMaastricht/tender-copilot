@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from pipeline.schemas import (
+    UNMATCHED_KINDS,
     FitDimension,
     FitDimensionName,
     FitScore,
@@ -126,9 +127,13 @@ def decide_recommendation(
 
     Reads the `verified` flags already set by the citation check; None counts as unverified.
     A knock-out is verified when both its own citation and its match's tender citation are.
+
+    Formal knock-outs are ignored: they are actions in the bid, not matched. With only formal
+    knock-outs the rules see none, and a match for a formal one has no knock-out to belong to.
     """
     if documents_missing:
         return RecommendationResult("needs_review", ("documents_missing",))
+    knockouts = [k for k in knockouts if k.kind not in UNMATCHED_KINDS]
     if not knockouts:
         return RecommendationResult("needs_review", ("no_knockouts_found",))
 

@@ -51,14 +51,14 @@ Company KB ──(embedded once)──►  6 extract ──► 7 match (agent lo
 | `pipeline/extract.py` | Stage 2 extraction (map over sections, then merge). |
 | `pipeline/match.py` | Requirement matching; one agent loop per requirement. |
 | `pipeline/schemas.py` | The Pydantic models of section 5, shared by every step and passed to the gateway for validation. |
-| `pipeline/prompt_specs.py` | Which prompt file, stage, schema, trusted variables and company sections each step uses; reads numbered sections from `docs/COMPANY.md`. |
+| `pipeline/prompt_specs.py` | Which prompt file, stage, schema, trusted variables and company sections each step uses; reads numbered sections from `docs/COMPANY.md`. `prompt_refs` gives the prompt references of one run, with a version replaced on request (used by the evals). |
 | `pipeline/citations.py` | Citation verifier: is the quote on the cited page? Pure code, used by the memo step and by chat. |
 | `pipeline/memo.py` | Memo generation, fit score, recommendation rules. |
 | `agent/loop.py`, `agent/tools.py` | Hand-written loop (max steps, tool errors returned to the model, token budget); tool definitions, argument checks and the contact-data guard. `agent/fakes.py` is a fake tool backend until the database exists. |
 | `jobs/daily.py` | Orchestrates steps 1 to 8; takes a Postgres advisory lock so two runs cannot overlap. |
 | `app/` | Streamlit: inbox, memo view, chat per tender, approve/reject. |
 | `crm/hubspot.py` | Creates the deal from an approved memo. |
-| `evals/` | Datasets (JSONL, in git), runners, results. |
+| `evals/` | Datasets (JSONL, in git), runners, results. `run.py` CLI; `snapshot.py` frozen snapshot and its hash; `labels.py` read-only label loaders; `metrics.py` formulas; `suites.py` the six evals; `targets.py` the pipeline steps they call; `budget.py` cost cap and dry run; `report.py` cost, latency and the results file. See `docs/EVALS.md`. |
 | `prompts/` | Versioned prompt files: `screen_v1`, `extract_map_v1`, `extract_reduce_v1`, `match_v1`, `memo_v1`, `memo_reason_v1`, `chat_v1`, and the gateway blocks. |
 
 ### 2.2 Daily job
@@ -1233,9 +1233,10 @@ BT identifiers are from memory **(confirm)** against the eForms SDK version foun
 | Award criteria: weight | BT-541 (and its weight, fixed and threshold variants) | Within 1 percentage point after normalising to 100. Top-level criteria only. |
 | Selection criteria: type present | BT-747 | Set comparison per type (economic, technical, suitability). This is a recall check for knock-out detection, not full ground truth. |
 | Selection criteria: threshold | BT-750, BT-752 | Only scored where the notice gives a concrete value. |
-| Framework agreement or DPS | BT-765, BT-766 | Exact. |
+| Framework agreement | BT-765 | Exact. |
 | Security clearance required | BT-578 | Exact. |
-| Submission language | BT-97 | Exact. |
+
+DPS (BT-766) and submission language (BT-97) are not graded in v1: `ExtractionOutput` has no field for them (decision of 15 Nov 2026).
 
 Many buyers fill award and selection criteria with "see tender documents". Such rows are excluded by a simple rule (short text or a reference to the documents), and the Phase 0 notebook must report coverage per field over the snapshot. A field with coverage under about 40% is dropped from this table.
 
@@ -1265,7 +1266,7 @@ Contact point, email and phone (BT-502, BT-506, BT-503). Stored in `contacts` on
 
 | Suite | Tests | Ground truth | Headline metric |
 |---|---|---|---|
-| screening | 2.3 + 2.4 | hand labels | recall at fixed precision; cost per 100 tenders |
+| screening | 2.3 + 2.4 | hand labels | precision and recall with "unsure" counted as shortlisted (Q13); recall at a fixed precision as a secondary number; cost per 100 screened |
 | retrieval | `rag/search.py` | hand-labelled pages | hit@5, MRR; hybrid versus vector-only |
 | extraction | 2.5 extract | eForms and TenderNed `sluitingsDatum` (6.1) | accuracy per field, with coverage |
 | knockout | 2.5 extract + match | hand annotations | requirement recall; match accuracy |
@@ -1273,6 +1274,8 @@ Contact point, email and phone (BT-502, BT-506, BT-503). Stored in `contacts` on
 | edge_cases | whole pipeline | expected behaviour | pass or fail per case |
 
 Model comparison: three providers on screening and on extraction plus matching, reported as quality, cost and p50/p95 latency from `llm_calls`.
+
+Formulas, label formats, the snapshot file layout and the results file are in `docs/EVALS.md`.
 
 ## 8. Open questions to decide
 
@@ -1329,3 +1332,7 @@ Model comparison: three providers on screening and on extraction plus matching, 
 | (not in plan) | `pipeline/schemas.py`, `pipeline/citations.py`, `memo_human_inputs` | Shared contracts; chat also verifies citations; human items need storage |
 | One memo call | Two memo calls: a draft, then the reason for the value that code decided | The reason must explain a value the model does not choose |
 | (not in plan) | `pipeline/prompt_specs.py`; map-step schema `ExtractionPartial`; contract risks with citations | One place ties prompt to schema; the map step had no schema; risks need a source |
+| Retrieval ground truth is the chunk holding the answer | The page holding the answer | Page labels survive a change of chunking (6.4) |
+| Evals read the snapshot from the database (`in_snapshot`) | Evals read files in `data/snapshot/`, checked against a manifest, until the database exists | The runner and the labelling can start before Day 7; the hash names the exact data |
+| One results file per run | `evals/results/<date>_<commit>.json` holds a list of runs | Three provider runs share a date and a commit |
+| Knock-out recall "weighted heaviest" | A composite score with knock-out recall as the largest weight, plus a minimum-recall gate | Decision of 15 Nov 2026 (`docs/EVALS.md` 4.7) |

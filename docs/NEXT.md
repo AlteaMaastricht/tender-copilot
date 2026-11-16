@@ -42,4 +42,5 @@ Status at close of Day 2 (13 Nov 2026). Commit only when Arthur asks.
 
 - Phase 2: agent loop, schemas, LLM gateway, extraction, matching, memo, Streamlit UI, HubSpot.
 - Phase 3: eval runner, 3-model comparison, one measured improvement.
+- Week 3 option: `--repeats N` for `evals/run.py`, to measure run-to-run variation (the API rejects `temperature`). Run each case N times and report the spread per metric next to the Wilson interval, which covers sampling only. Not built (decision of 15 Nov 2026).
 - Phase 4: deployment on one VM, README with GDPR and AI Act section, CV update, Sia application follow-up.

@@ -117,6 +117,7 @@ Monthly counts (2026):
 | 14 Nov 2026 | Arthur | Agent loop decisions recorded: limits, stop reasons, `ChatAnswer`. |
 | 14 Nov 2026 | Arthur | Q13 decided. Prompt decisions recorded: seven v1 prompts, two memo calls, KB pre-fetch, model-facing memo schemas, map-step schema. |
 | 14 Nov 2026 | Arthur | Formal knock-outs are not matched (`action_required`); `get_company_facts` returns the `kb_id` of each fact. |
+| 15 Nov 2026 | Arthur | Eval runner decisions recorded: snapshot as files, composite plus gate, one results file per date and commit, runner built before the pipeline steps. |
 
 ---
 
@@ -288,3 +289,55 @@ Open:
 - `KeyDateTime` cannot hold a date without a time; v1 writes 00:00 with a warning.
 - CPV labels for the screening input need a lookup table.
 - The code that builds each prompt's input (`pipeline/screen.py`, `pipeline/extract.py`, the memo calls and assembly, the KB pre-fetch) is not built.
+
+---
+
+## Evals (15 Nov 2026)
+
+`evals/run.py`, its metrics, the label formats and the results file. Details and exact formulas are in `docs/EVALS.md`. No eval has been run against a model yet.
+
+Decided by Arthur on 15 Nov 2026:
+
+| Topic | Decision |
+|---|---|
+| Snapshot | The runner reads files in `data/snapshot/`, checked against a manifest with a SHA-256 per file. Not the database. The snapshot hash and the hash of each label file go into every result. |
+| Knock-out recall "weighted heaviest" | Both: a composite score in which knock-out recall has the largest weight, and a gate with a minimum knock-out recall. A failed gate marks the run not recommended whatever the composite is. |
+| Results file | `evals/results/<date>_<commit>.json` holds a list of runs. A run is appended; earlier runs are never changed. |
+| Build order | Runner, metrics and loaders are built now. An eval whose pipeline step does not exist reports `not_built` and names the module it waits for. |
+| Tests | Synthetic mini snapshot and labels under `tests/fixtures/evals/`, stub steps and the fake provider. No live call. |
+
+Proposed (in the code, to confirm):
+
+| Topic | Proposal |
+|---|---|
+| Composite weights | Knock-out 0.30, extraction 0.20, screening 0.20, retrieval 0.10, memo 0.10, edge cases 0.10, in `evals/weights.toml`. |
+| Screening value in the composite | F2, because Stage 1 is tuned for recall. Precision and recall are the headline. Recall at a fixed precision is reported only with `--min-precision`. |
+| As-of date | The hard filter gets the day after publication as "today", because every snapshot tender has closed. An edge-case label can set its own date. |
+| Knock-out match rule | Same document, page within 1, same category, one-to-one. Formal and non-formal requirements are matched apart: a real knock-out extracted as a formal action does not count as found. |
+| Lot titles | Graded only where the notice has two or more lots. |
+| Memo eval tenders | The tenders that have knock-out labels. |
+| Generated memos | Saved under `--memo-dir`; the command line defaults to `data/eval_memos/` (git-ignored, E4). |
+| Extraction overrides | Tender level only: deadline, lot count, estimated value, framework maximum. |
+| Dry run | 3 characters per token and fixed token figures per stage, listed in `docs/EVALS.md` section 6. To be replaced by measured values after the first real run. |
+| Makefile defaults | `STAGE1 = claude-haiku-5-5`, `STAGE2 = claude-sonnet-5-5`, following Q4. `make evals` without `MAX_COST` is a dry run. |
+
+Answers to the open eval questions, 15 Nov 2026 (Arthur):
+
+| # | Topic | Status | Decision |
+|---|---|---|---|
+| E1 | Knock-out recall gate | Proposed | `min_knockout_recall = 0.90` in `evals/weights.toml`. To confirm after the first real run. |
+| E2 | Composite weights and screening value | Decided | Keep the weights above and F2 as the screening value. |
+| E3 | Cost cap | Decided (Q12 stays open) | No default cap; a live run without `--max-cost-usd` is refused. The first real run is about 20 tenders with `MAX_COST=10`. Q12 (the daily job's cap) stays open. |
+| E4 | Git-ignored eval data | Decided | `data/snapshot/` and `data/eval_memos/` are in `data/.gitignore`. `data/eval_memos/` is now the default `--memo-dir` of the command line. A test fails if either path is not ignored, or if `evals/results/` is. |
+| E5 | DPS and submission language | Decided | Dropped from `ARCHITECTURE.md` 6.1 for v1. `ExtractionOutput` has no field for them. |
+| E6 | Run-to-run variation | Decided | No `--repeats` now. Listed in `docs/NEXT.md` as a week-3 option. The Wilson interval covers sampling only. |
+| E7 | Results files | Decided | `evals/results/` is committed. A test checks that a results file and its case rows hold only scores, costs, versions and identifiers: no document text and no quotes. |
+
+Open:
+
+- Q12: the daily job's cost cap.
+- Six fields of `ARCHITECTURE.md` 6.1 have no ground truth until `ingest/ted.py` reads them.
+- Only an Anthropic run is possible today: Mistral has no price row and OpenAI has no adapter.
+- Nothing writes `data/snapshot/` yet. The freeze script is a separate task.
+
+Code change outside `evals/`: `pipeline/prompt_specs.py` gained `prompt_refs`, so that a run with another prompt version still makes its prompt references in the registry (the existing test on `PromptRef` calls stays as it is).

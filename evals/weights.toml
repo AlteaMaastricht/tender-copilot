@@ -1,0 +1,17 @@
+# Composite weights and the knock-out recall gate (docs/EVALS.md 4.7).
+# These are Arthur's to set. The runner only reads this file.
+
+[weights]
+# One weight per eval. They must be 0 or more and sum to 1.
+knockout = 0.30
+extraction = 0.20
+screening = 0.20
+retrieval = 0.10
+memo = 0.10
+edge_cases = 0.10
+
+[gate]
+# The lowest knock-out recall a model may have. Below it, a run is marked not recommended
+# whatever its other scores. Without this line the gate reads "not_set".
+# Proposed 15 Nov 2026; to confirm after the first real run (DECISIONS.md, Evals).
+min_knockout_recall = 0.90

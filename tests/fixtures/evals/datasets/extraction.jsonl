@@ -1,0 +1,3 @@
+{"publication_id": 9001}
+{"publication_id": 9002, "skip_fields": ["duration_months"], "note": "durations in the notice are per lot and unclear"}
+{"publication_id": 9004, "overrides": {"lot_count": 1}, "note": "scanned documents"}

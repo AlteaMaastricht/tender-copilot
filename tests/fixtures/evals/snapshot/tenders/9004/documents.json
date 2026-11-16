@@ -1,0 +1,6 @@
+{
+  "documents_access": "tenderned",
+  "documents": [
+    {"document_id": 5, "doc_key": "a90040000005", "filename": "Leidraad (scan).pdf", "doc_type": "guideline", "is_current": true, "published_at": "2026-05-04", "extraction_status": "scanned", "page_kind": "page", "language": null}
+  ]
+}

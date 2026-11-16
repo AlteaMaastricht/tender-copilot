@@ -12,7 +12,7 @@ knowledge base exists.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,6 +58,21 @@ MEMO_REASON = PromptSpec(
 CHAT = PromptSpec(PromptRef("chat", "v1"), "chat", ChatAnswer, ("tender_id",))
 
 ALL: tuple[PromptSpec, ...] = (SCREEN, EXTRACT_MAP, EXTRACT_REDUCE, MATCH, MEMO, MEMO_REASON, CHAT)
+
+
+def prompt_refs(versions: Mapping[str, str] | None = None) -> dict[str, PromptRef]:
+    """Prompt name to the reference a run uses: the registered version, or the one given.
+
+    The evals use this to measure another version of one prompt, for example
+    `{"extract_map": "v2"}`. A name that is not registered is an error.
+    """
+    versions = versions or {}
+    if unknown := sorted(set(versions) - {spec.ref.name for spec in ALL}):
+        raise ValueError(f"unknown prompt name(s): {', '.join(unknown)}")
+    return {
+        spec.ref.name: PromptRef(spec.ref.name, versions.get(spec.ref.name, spec.ref.version))
+        for spec in ALL
+    }
 
 
 def company_sections(numbers: Sequence[int], path: Path = COMPANY_MD) -> str:

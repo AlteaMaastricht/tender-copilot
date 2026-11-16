@@ -2,3 +2,7 @@ snapshot_candidates_raw.psv
 snapshot_candidates.csv
 llm_calls.jsonl
 llm_payloads/
+# Frozen eval snapshot: tender documents and page text (decision Q2).
+snapshot/
+# Memos written by eval runs (`--memo-dir`): they hold tender text.
+eval_memos/

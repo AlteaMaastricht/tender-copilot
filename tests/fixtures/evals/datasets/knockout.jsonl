@@ -1,0 +1,6 @@
+{"publication_id": 9001, "label_id": "9001-KO-01", "doc_key": "a90010000001", "page": 2, "category": "financial", "kind": "suitability", "text": "A minimum average annual turnover.", "threshold": "EUR 500,000 per year", "expected_status": "met"}
+{"publication_id": 9001, "label_id": "9001-KO-02", "doc_key": "a90010000001", "page": 2, "category": "reference_project", "kind": "suitability", "text": "One comparable reference project.", "expected_status": "not_met"}
+{"publication_id": 9001, "label_id": "9001-KO-03", "doc_key": "a90010000002", "page": 1, "category": "certification", "kind": "minimum_requirement", "text": "A valid information security certificate."}
+{"publication_id": 9001, "label_id": "9001-KO-04", "doc_key": "a90010000001", "page": 3, "category": "other", "kind": "formal", "text": "The bid is signed by an authorised person."}
+{"publication_id": 9002, "label_id": "9002-KO-01", "doc_key": "a90020000003", "page": 1, "category": "insurance", "kind": "suitability", "text": "Professional liability insurance.", "expected_status": "met"}
+{"publication_id": 9002, "label_id": "9002-KO-02", "doc_key": "a90020000003", "page": 2, "category": "exclusion_ground", "kind": "exclusion", "text": "No exclusion ground applies."}

@@ -1,0 +1,6 @@
+{
+  "documents_access": "tenderned",
+  "documents": [
+    {"document_id": 4, "doc_key": "a90030000004", "filename": "Offerteaanvraag.pdf", "doc_type": "guideline", "is_current": true, "published_at": "2026-04-06", "extraction_status": "ok", "page_kind": "page", "language": "nl"}
+  ]
+}

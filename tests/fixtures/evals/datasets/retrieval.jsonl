@@ -1,0 +1,4 @@
+{"question_id": "RQ-01", "publication_id": 9001, "question": "Wat zijn de gunningscriteria en hun wegingen?", "language": "nl", "answers": [{"doc_key": "a90010000001", "pages": [3]}]}
+{"question_id": "RQ-02", "publication_id": 9001, "question": "Welke omzeteis geldt er?", "language": "nl", "answers": [{"doc_key": "a90010000001", "pages": [2]}]}
+{"question_id": "RQ-03", "publication_id": 9002, "question": "Which insurance is required?", "language": "en", "answers": [{"doc_key": "a90020000003", "pages": [1]}]}
+{"question_id": "RQ-04", "publication_id": 9002, "question": "Welke uitsluitingsgronden gelden?", "language": "nl", "answers": [{"doc_key": "a90020000003", "pages": [2]}]}

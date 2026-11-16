@@ -1,0 +1,4 @@
+{"publication_id": 9001, "label": "relevant", "stratum": "shortlist", "note": "data platform for a municipality"}
+{"publication_id": 9002, "label": "not_relevant", "stratum": "shortlist", "note": "mostly licences"}
+{"publication_id": 9003, "label": "relevant", "stratum": "filtered_out", "note": "fits, but closes within a week"}
+{"publication_id": 9004, "label": "not_relevant", "stratum": "reject"}

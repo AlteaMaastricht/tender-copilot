@@ -1,0 +1,3 @@
+{"case_id": "EC-01", "type": "passed_deadline", "publication_id": 9003, "as_of": "2026-06-01", "expect": {"filter_passed": false, "filter_failed_rule": "deadline", "memo_created": false, "max_model_calls": 0}}
+{"case_id": "EC-02", "type": "scanned_pdf", "publication_id": 9004, "expect": {"memo_created": true, "recommendation": "needs_review", "reason_codes_include": ["documents_missing"]}}
+{"case_id": "EC-03", "type": "off_topic_question", "publication_id": 9001, "question": "Wat is de hoofdstad van Frankrijk?", "expect": {"chat_in_scope": false}}

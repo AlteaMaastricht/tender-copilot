@@ -1,0 +1,92 @@
+{
+  "snapshot_version": "test-fixture-1",
+  "frozen_at": "2026-11-15",
+  "kb_version": null,
+  "files": [
+    {
+      "path": "tenders/9001/contacts.json",
+      "sha256": "ac316bf6186902bd89819e72553d119954995280af1d309c2c0e36c5b0902680",
+      "bytes": 32
+    },
+    {
+      "path": "tenders/9001/documents.json",
+      "sha256": "ff66533ec62136baac4e98298af0ddcbfa577a9a5eb2af01f640164b776f3063",
+      "bytes": 526
+    },
+    {
+      "path": "tenders/9001/notice.xml",
+      "sha256": "d0c3e463f033cbfd18a852e7515c2b19e632b4835783a66c52ebc7ce57b09494",
+      "bytes": 4218
+    },
+    {
+      "path": "tenders/9001/pages/a90010000001.jsonl",
+      "sha256": "d2dc1bce99428561cdce2e22f330a58a5314493c1efcbb34a9f996a7fa6b0ba2",
+      "bytes": 548
+    },
+    {
+      "path": "tenders/9001/pages/a90010000002.jsonl",
+      "sha256": "376adbbb9237fba0576b08e4ad86b4405a2999f577d038b8af3e7480e4590923",
+      "bytes": 247
+    },
+    {
+      "path": "tenders/9001/tenderned.json",
+      "sha256": "450e0195e4e910fa01fa8778ebb00af637b787e9b92e3bf6f03f35fafada5689",
+      "bytes": 131
+    },
+    {
+      "path": "tenders/9002/documents.json",
+      "sha256": "40d2dca0168a1999a3350566a22d0c20e47c14d3a6c65b8baefd62dff40d6553",
+      "bytes": 292
+    },
+    {
+      "path": "tenders/9002/notice.xml",
+      "sha256": "b877972b8e973898c3a1a4b8ae3d53d112de9be87cdf9f6aa11b52c54efeaac9",
+      "bytes": 5714
+    },
+    {
+      "path": "tenders/9002/pages/a90020000003.jsonl",
+      "sha256": "facf7dfe1f62acae9713314c44f2d792cd6115ca7b9d2b5096854ebd78838712",
+      "bytes": 277
+    },
+    {
+      "path": "tenders/9002/tenderned.json",
+      "sha256": "17ab7dd500f4f4c6d3cc0bfa8ae1810702cd62bf4da71d4c2796d8eb40c5355c",
+      "bytes": 131
+    },
+    {
+      "path": "tenders/9003/documents.json",
+      "sha256": "6c35503336e99a9c9534ea2666070e7f6f3ba3f8598246a4145b31f37b53d88f",
+      "bytes": 286
+    },
+    {
+      "path": "tenders/9003/notice.xml",
+      "sha256": "8a5beaf7a350f09e5513b7390cf6a3ee5dccb153be0080076c24393f1c987097",
+      "bytes": 4248
+    },
+    {
+      "path": "tenders/9003/pages/a90030000004.jsonl",
+      "sha256": "e3147cdcceb6472ace73348979fea021e04b98d66b697bd7ad5a4aac8f27bce7",
+      "bytes": 106
+    },
+    {
+      "path": "tenders/9003/tenderned.json",
+      "sha256": "999f52c9d0e44f97a42d892399e5ea565a52ed3179d6b34811c56106d7213720",
+      "bytes": 131
+    },
+    {
+      "path": "tenders/9004/documents.json",
+      "sha256": "33c32f88f446aa83cf4438750b98a69e3ddc68ceeaabbc385815686882b86dc6",
+      "bytes": 291
+    },
+    {
+      "path": "tenders/9004/notice.xml",
+      "sha256": "7df8831499e5f12ec1f2b1532fead7d6815b72fe3158839d7e4cc38946476e27",
+      "bytes": 3965
+    },
+    {
+      "path": "tenders/9004/tenderned.json",
+      "sha256": "dc1d8dbfddd80e6814959383aa498b01b815d1329ceae5889bf7411f341d9de1",
+      "bytes": 116
+    }
+  ]
+}

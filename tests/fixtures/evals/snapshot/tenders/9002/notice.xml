@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic notice for the eval tests. Not a real tender. -->
+<ContractNotice xmlns="urn:oasis:names:specification:ubl:schema:xsd:ContractNotice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:efac="http://data.europa.eu/p27/eforms-ubl-extension-aggregate-components/1" xmlns:efbc="http://data.europa.eu/p27/eforms-ubl-extension-basic-components/1" xmlns:efext="http://data.europa.eu/p27/eforms-ubl-extensions/1" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2">
+  <ext:UBLExtensions>
+    <ext:UBLExtension>
+      <ext:ExtensionContent>
+        <efext:EformsExtension>
+          <efac:NoticeSubType>
+            <cbc:SubTypeCode listName="notice-subtype">16</cbc:SubTypeCode>
+          </efac:NoticeSubType>
+          <efac:Organizations>
+            <efac:Organization>
+              <efac:Company>
+                <cac:PartyIdentification>
+                  <cbc:ID schemeName="organization">ORG-0001</cbc:ID>
+                </cac:PartyIdentification>
+                <cac:PartyName>
+                  <cbc:Name languageID="NLD">Waterschap Voorbeeldland</cbc:Name>
+                </cac:PartyName>
+                <cac:PostalAddress>
+                  <cac:Country>
+                    <cbc:IdentificationCode listName="country">NLD</cbc:IdentificationCode>
+                  </cac:Country>
+                </cac:PostalAddress>
+              </efac:Company>
+            </efac:Organization>
+          </efac:Organizations>
+          <efac:Publication>
+            <efbc:NoticePublicationID schemeName="ojs-notice-id">00009002-2026</efbc:NoticePublicationID>
+            <efbc:PublicationDate>2026-03-09+01:00</efbc:PublicationDate>
+          </efac:Publication>
+        </efext:EformsExtension>
+      </ext:ExtensionContent>
+    </ext:UBLExtension>
+  </ext:UBLExtensions>
+  <cbc:ID schemeName="notice-id">00000000-0000-4000-8000-000000009002</cbc:ID>
+  <cbc:ContractFolderID>10000000-0000-4000-8000-000000009002</cbc:ContractFolderID>
+  <cbc:IssueDate>2026-03-08+01:00</cbc:IssueDate>
+  <cbc:VersionID>01</cbc:VersionID>
+  <cbc:NoticeTypeCode listName="competition">cn-standard</cbc:NoticeTypeCode>
+  <cbc:NoticeLanguageCode>NLD</cbc:NoticeLanguageCode>
+  <cac:ContractingParty>
+    <cac:ContractingPartyType>
+      <cbc:PartyTypeCode listName="buyer-legal-type">body-pl</cbc:PartyTypeCode>
+    </cac:ContractingPartyType>
+    <cac:Party>
+      <cac:PartyIdentification>
+        <cbc:ID schemeName="organization">ORG-0001</cbc:ID>
+      </cac:PartyIdentification>
+    </cac:Party>
+  </cac:ContractingParty>
+  <cac:TenderingProcess>
+    <cbc:ProcedureCode listName="procurement-procedure-type">open</cbc:ProcedureCode>
+  </cac:TenderingProcess>
+  <cac:ProcurementProject>
+    <cbc:ID>PRJ-9002</cbc:ID>
+    <cbc:Name languageID="NLD">Dashboardsoftware en implementatie</cbc:Name>
+    <cbc:ProcurementTypeCode listName="contract-nature">services</cbc:ProcurementTypeCode>
+    <cac:RequestedTenderTotal>
+      <ext:UBLExtensions>
+        <ext:UBLExtension>
+          <ext:ExtensionContent>
+            <efext:EformsExtension>
+              <efbc:FrameworkMaximumAmount currencyID="EUR">500000</efbc:FrameworkMaximumAmount>
+            </efext:EformsExtension>
+          </ext:ExtensionContent>
+        </ext:UBLExtension>
+      </ext:UBLExtensions>
+      <cbc:EstimatedOverallContractAmount currencyID="EUR">400000</cbc:EstimatedOverallContractAmount>
+    </cac:RequestedTenderTotal>
+    <cac:MainCommodityClassification>
+      <cbc:ItemClassificationCode listName="cpv">48000000</cbc:ItemClassificationCode>
+    </cac:MainCommodityClassification>
+  </cac:ProcurementProject>
+  <cac:ProcurementProjectLot>
+    <cbc:ID schemeName="Lot">LOT-0001</cbc:ID>
+    <cac:TenderingProcess>
+      <cac:TenderSubmissionDeadlinePeriod>
+        <cbc:EndDate>2026-05-11+02:00</cbc:EndDate>
+        <cbc:EndTime>10:00:00+02:00</cbc:EndTime>
+      </cac:TenderSubmissionDeadlinePeriod>
+    </cac:TenderingProcess>
+    <cac:ProcurementProject>
+      <cbc:Name languageID="NLD">Perceel 1: Licenties dashboardsoftware</cbc:Name>
+      <cac:RequestedTenderTotal>
+        <cbc:EstimatedOverallContractAmount currencyID="EUR">150000</cbc:EstimatedOverallContractAmount>
+      </cac:RequestedTenderTotal>
+      <cac:PlannedPeriod>
+        <cbc:DurationMeasure unitCode="MONTH">24</cbc:DurationMeasure>
+      </cac:PlannedPeriod>
+      <cac:MainCommodityClassification>
+        <cbc:ItemClassificationCode listName="cpv">48000000</cbc:ItemClassificationCode>
+      </cac:MainCommodityClassification>
+    </cac:ProcurementProject>
+  </cac:ProcurementProjectLot>
+  <cac:ProcurementProjectLot>
+    <cbc:ID schemeName="Lot">LOT-0002</cbc:ID>
+    <cac:TenderingProcess>
+      <cac:TenderSubmissionDeadlinePeriod>
+        <cbc:EndDate>2026-05-11+02:00</cbc:EndDate>
+        <cbc:EndTime>10:00:00+02:00</cbc:EndTime>
+      </cac:TenderSubmissionDeadlinePeriod>
+    </cac:TenderingProcess>
+    <cac:ProcurementProject>
+      <cbc:Name languageID="NLD">Perceel 2: Implementatie en beheer</cbc:Name>
+      <cac:RequestedTenderTotal>
+        <cbc:EstimatedOverallContractAmount currencyID="EUR">250000</cbc:EstimatedOverallContractAmount>
+      </cac:RequestedTenderTotal>
+      <cac:PlannedPeriod>
+        <cbc:DurationMeasure unitCode="MONTH">36</cbc:DurationMeasure>
+      </cac:PlannedPeriod>
+      <cac:MainCommodityClassification>
+        <cbc:ItemClassificationCode listName="cpv">72260000</cbc:ItemClassificationCode>
+      </cac:MainCommodityClassification>
+    </cac:ProcurementProject>
+  </cac:ProcurementProjectLot>
+</ContractNotice>

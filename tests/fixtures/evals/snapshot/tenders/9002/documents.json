@@ -1,0 +1,6 @@
+{
+  "documents_access": "tenderned",
+  "documents": [
+    {"document_id": 3, "doc_key": "a90020000003", "filename": "Inschrijvingsleidraad.pdf", "doc_type": "guideline", "is_current": true, "published_at": "2026-03-09", "extraction_status": "ok", "page_kind": "page", "language": "nl"}
+  ]
+}

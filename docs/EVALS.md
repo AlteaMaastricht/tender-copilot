@@ -66,7 +66,7 @@ data/snapshot/
 - `doc_key` is the first 12 hex characters of the file's SHA-256. Labels use it, so they survive a database rebuild.
 - **Snapshot hash:** SHA-256 of the manifest's `files` list as canonical JSON, sorted by path. At start the runner re-hashes every listed file. A changed file, a missing file or a file that is not listed stops the run with exit code 2.
 - **Ground truth** is derived in code from `notice.xml` and `tenderned.json` (`evals/snapshot.py`, `ground_truth`). A document-reading step receives only the documents and their page text: no notice fields, no closing date, no contact names.
-- **As-of date.** The snapshot tenders closed months ago, so the hard filter is given the day after the tender's publication date as "today". An edge-case label can set its own `as_of`.
+- **As-of date.** The snapshot tenders closed months ago, so the hard filter is given the day after the tender's publication date as "today": the start of that day in Amsterdam time, since the filter takes a moment. An edge-case label can set its own `as_of`.
 - `contacts.json` and `tenderned.json` are optional. Without `tenderned.json` the tender has no TenderNed match.
 - Nothing writes this folder yet. The freeze script is a separate task; `evals.snapshot.build_manifest` gives it the manifest.
 

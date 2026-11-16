@@ -89,10 +89,10 @@ Applied to eForms fields and the TenderNed publication detail; each rule records
 
 | Rule | Source | From COMPANY.md |
 |---|---|---|
-| Country is NL | buyer country (first buyer); a lot's place of performance outside NL is the flag `place_outside_nl`, not a fail | section 4, 5; decision S3 |
+| Country is NL | buyer country (first buyer), compared as ISO alpha-2 (`NL`); the notice's own alpha-3 value is kept as the rule's `raw`. A code missing from the conversion table gives `unknown` (`unrecognised_code`), never a fail. A lot's place of performance outside NL is the flag `place_outside_nl`, not a fail | section 4, 5; decision S3, R10 |
 | Main or additional CPV starts with 72, 79, 48, 73, at procedure or lot level | BT-262, BT-263 | section 4 (CPV 73 adds the flag `cpv_73_check_scope`) |
 | Notice is a contract notice (`cn-standard`, `cn-social`); award, prior information, VEAT and market-consultation notices fail | notice type | n/a |
-| Deadline is in the future and at least 10 working days (Monday to Friday) after publication | `sluitingsDatum` from TenderNed `/publicaties/{id}`, TED publication date | section 5 |
+| Deadline is in the future and at least 10 working days (Monday to Friday) after publication. The value is read in Europe/Amsterdam time by one parser (`parse_sluitingsdatum`); with a time, a tender that closed earlier today fails; a date without a time stays open that day | `sluitingsDatum` from TenderNed `/publicaties/{id}`, TED publication date | section 5; decision R3 |
 | Closing date is a real date. `2099-12-31`, a date more than five years after publication, or a missing date gives `unknown` | `sluitingsDatum`, publication date | n/a (`DECISIONS.md`, data findings) |
 | Estimated value is between EUR 50k and EUR 2M, checked per lot: lot values first, the procedure value only when no lot has one. Passes if any lot is in range; above 2M only gives pass with the flag `consortium_only`; no value gives `unknown` | BT-27 (lot, then procedure) | section 4; Q11 |
 | Main nature: `supplies` or `works` gives the flag `nature_supplies`, not a fail (software packages are often classed as supplies) | BT-23 | section 5 (hardware supply) |
@@ -124,6 +124,7 @@ One call per tender with a small model. Input: redacted notice title, descriptio
 - Recommendation: decided in code from the knock-out results and the fit score (section 5.4). The model writes only the one-sentence reason.
 - Citation check (`pipeline/citations.py`): the quote must be one contiguous piece of the text of the cited page. Neighbouring pages are not searched, so a quote that runs over a page break fails; the evals count these as false negatives.
   - Normalised on both sides: Unicode NFKC (ligatures, non-breaking spaces, composed accents), invisible characters, hyphens at line breaks, whitespace, quote marks and apostrophes, dashes, case.
+  - Fallback: when that fails and the page or the quote has a hyphen at a line break, hyphens between two letters are ignored on both sides. This covers a passage with both a split word and a real hyphen at a line break (decision R7).
   - Not normalised: accents, punctuation, number formats. There is no fuzzy matching.
   - Always fails: a quote with fewer than 10 letters or digits, a quote shortened in the middle, an empty page.
   - The result is pass or fail with a reason code. Unverified citations are marked in the memo and do not count as a source.
@@ -141,10 +142,11 @@ Per tender. The same agent loop with `get_tender`, `search_tender_docs`, `read_d
 ### 2.8 Privacy
 
 - Contact data lives only in `contacts`. No query used to build model input joins that table.
-- The gateway redacts emails, phone numbers and the contact names from `contacts` before every call, in the system prompt, the data, user turns and tool results. Application code passes the names to a `Redactor`; they are used only for local matching. Matched name forms: full name, initial plus surname, surname after a title.
-- This is best effort, and the README must say so. Not caught: names that are not in `contacts`, a bare surname without a title, misspelt or OCR-damaged names, obfuscated email addresses, unusual phone formats, and other personal data such as postal addresses. A ten-digit number starting with 0 can be replaced as a phone number by mistake.
+- The gateway redacts emails, phone numbers and the contact names from `contacts` before every call, in the system prompt, the data, user turns and tool results. Application code builds a `Redactor` from the `contacts` rows (`Redactor.from_contacts`); the names are used only for local matching. Matched name forms: full name, initial plus surname, surname after a title.
+- Two rules keep tender text readable (decision R2). Digits separated by spaces are a phone number only when grouped like one, so a scoring scale or a spaced IBAN stays. A contact name that equals an organisation name, or is not shaped like a person's name (a department, a single word without a title), is not redacted.
+- This is best effort, and the README must say so. Not caught: names that are not in `contacts`, a bare surname without a title, misspelt or OCR-damaged names, obfuscated email addresses, unusual phone formats, and other personal data such as postal addresses. A ten-digit number starting with 0, written in one block or grouped like a phone number, can be replaced as a phone number by mistake.
 - Tender text, notice text and tool results are passed to the gateway as data. It wraps them in tags named per run and never places them in the system prompt.
-- A quote copied from redacted text can contain `[EMAIL]`, `[PHONE]` or `[NAME]`. The caller of the citation verifier must redact the stored page text with the same `Redactor` before the check.
+- A quote copied from redacted text can contain `[EMAIL]`, `[PHONE]` or `[NAME]`. The stored page text is redacted with the same `Redactor` before the check: `verify_redacted_citation` and `verify_citations` in `pipeline/citations.py` do this.
 - Stored payloads are redacted, off by default (`LLM_PAYLOAD_DIR`), and purged after 30 days.
 - Provider keys (`APP_ANTHROPIC_API_KEY`, `MISTRAL_API_KEY`) come from the process environment first, then from `.env`, which `llm/env.py` reads only for the requested variable. Nothing is copied into the environment, printed or logged.
 - `contacts` rows carry `purge_after` (deadline plus a retention period).
@@ -209,7 +211,7 @@ One row per procurement procedure (latest notice version).
 | notice_type | text | contract notice, change, cancellation |
 | title, description | text | redacted copies used for model input |
 | buyer_name, buyer_type | text | organisation, not a person |
-| country | char(2) | |
+| country | char(2) | ISO 3166-1 alpha-2, e.g. `NL`. eForms gives alpha-3 (`NLD`); the parser converts it and keeps the raw value (`TedNotice.country_raw`, and `filter_result.country.raw`) |
 | cpv_main | text | |
 | cpv_codes | text[] | main plus additional |
 | main_nature | text | services, supplies, works |
@@ -428,7 +430,8 @@ Indexes: unique `(memo_id)`, unique `(crm_deal_id) where crm_deal_id is not null
 | step_index | int | position in an agent loop |
 | input_tokens, output_tokens, cached_tokens | int | `input_tokens` counts all prompt tokens; `cached_tokens` is the part read from a cache. Summed over a validation retry. |
 | cost_usd | numeric(10,6) | from a price table in config |
-| latency_ms | int | |
+| latency_ms | int | time inside the provider calls, summed over network attempts; waiting between attempts is not included |
+| backoff_ms | int | time waited before network retries (backoff or `retry-after`) |
 | tool_calls | jsonb | names and arguments |
 | stop_reason | text | |
 | validation_retries | int | 0 or 1 |
@@ -629,7 +632,7 @@ class CitedText(BaseModel):
 Level = Literal["high", "medium", "low"]
 ```
 
-- `Citation.verified` is always overwritten by the citation check (`pipeline/citations.py`). A value set by a model has no effect.
+- `Citation.verified` is always overwritten by the citation check (`pipeline/citations.py`). A value set by a model has no effect: the gateway sets the flag to null on every model output (`reset_verified` in `llm/verified.py`, which clears any field named `verified`), and `recommend` in `pipeline/memo.py` runs the check on every citation before the rules read it (decision R1).
 - `KbEvidence` quotes are not verified yet. They will be checked against `company_kb.content` later.
 
 ### 5.1 Screening output
@@ -1094,14 +1097,15 @@ Filled by code, never by the model: `tender`, `deadlines.submission_deadline`, `
 - An unscored dimension, human or copilot, counts 1 for `provisional_min` and 5 for `provisional_max`. `total` is null until all seven are scored.
 - When the human scores are entered, the fit score and the recommendation are computed again.
 
-**Recommendation rules** (`decide_recommendation` in `pipeline/memo.py`). The model proposes no value; it writes only `recommendation_reason`. Formal knock-outs are ignored by every rule: a "knock-out" below means one of kind `exclusion`, `suitability` or `minimum_requirement`. A match for a formal knock-out counts as a match without a knock-out. Rules are applied in this order:
+**Recommendation rules** (`decide_recommendation` in `pipeline/memo.py`, reached through `recommend`, which checks every citation first). The model proposes no value; it writes only `recommendation_reason`. Formal knock-outs are ignored by every rule: a "knock-out" below means one of kind `exclusion`, `suitability` or `minimum_requirement`. A match for a formal knock-out counts as a match without a knock-out. Rules are applied in this order:
 
 1. Documents missing (status `docs_unavailable`, or every document scanned or unsupported): `needs_review`.
 2. No knock-out criteria extracted, other than formal ones: `needs_review`.
-3. A knock-out `not_met` with mitigation `none`, with both its citations verified: `no_bid`. This wins over every rule below.
+3. A knock-out `not_met` with mitigation `none` that applies to all lots, with both its citations verified: `no_bid`. This wins over every rule below.
 4. Any of the following: `needs_review`.
    - a knock-out `unclear`
    - a knock-out `not_met` with mitigation `ask_in_qa` (the outcome depends on the buyer)
+   - a knock-out `not_met` that applies to named lots only (`applies_to_lots` not empty), whatever its mitigation: reason `lot_specific_knockout`. Such a knock-out never counts for rule 3 or rule 5. Interim rule until Q8 is decided (decision R9)
    - a knock-out `not_met` with mitigation `none` whose own citation is unverified
    - any other unverified knock-out citation
    - a knock-out without a match, a match without a knock-out, or a duplicate identifier

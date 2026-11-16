@@ -30,6 +30,7 @@ from evals.metrics import (
 )
 from evals.snapshot import Snapshot, SnapshotTender, as_of_date, ground_truth, load_tender
 from evals.targets import SEARCH_MODES, WAITING_FOR, StepEnv, Targets
+from ingest.parsing import start_of_day
 from llm.client import CallContext, Gateway
 from llm.prompts import PromptRef
 from llm.redact import Redactor
@@ -187,7 +188,10 @@ class Runner:
             model=model,
             prompts=self.prompts,
             context=CallContext(run_id=self.run_id, tender_id=tender.publication_id),
-            redactor=Redactor(tender.contact_names),
+            redactor=Redactor(
+                tender.contact_names,
+                organisations=[b.name for b in tender.notice.buyers if b.name],
+            ),
         )
 
     @staticmethod
@@ -214,7 +218,7 @@ class Runner:
                 tender.notice,
                 sluitingsdatum=tender.sluitingsdatum,
                 tenderned_matched=tender.tenderned is not None,
-                today=today,
+                now=start_of_day(today),
             )
             output, error = None, None
             if result.passed:

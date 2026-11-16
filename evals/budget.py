@@ -22,6 +22,7 @@ from agent.loop import CHAT_MAX_STEPS, CHAT_TOKEN_BUDGET, MATCH_MAX_STEPS, MATCH
 from evals.labels import Labels
 from evals.metrics import FORMAL
 from evals.snapshot import READABLE, Snapshot, SnapshotTender, as_of_date, load_tender
+from ingest.parsing import start_of_day
 from llm.log import CallLog, LlmCallRecord
 from llm.prices import PRICES, ModelPrice
 from llm.prompts import PromptRef, schema_json
@@ -228,7 +229,7 @@ def estimate_run(
             item.notice,
             sluitingsdatum=item.sluitingsdatum,
             tenderned_matched=item.tenderned is not None,
-            today=today or as_of_date(item.notice),
+            now=start_of_day(today or as_of_date(item.notice)),
         ).passed
 
     screened: set[tuple[int, Any]] = set()

@@ -10,6 +10,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+from llm.redact import Redactor
+from pipeline.citations import PageLookup, verify_citations
 from pipeline.schemas import (
     UNMATCHED_KINDS,
     FitDimension,
@@ -46,6 +48,16 @@ _SEVERITY: dict[Band, int] = {"bid": 0, "bid_conditional": 1, "no_bid": 2}
 class RecommendationResult:
     recommendation: Recommendation
     reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CheckedRecommendation:
+    """The recommendation, with the inputs as checked: every `verified` flag set by code."""
+
+    knockouts: tuple[KnockoutCriterion, ...]
+    matches: tuple[RequirementMatch, ...]
+    fit: FitScore
+    result: RecommendationResult
 
 
 # --- fit score -----------------------------------------------------------------
@@ -125,11 +137,15 @@ def decide_recommendation(
 ) -> RecommendationResult:
     """Apply the knock-out rules, then the fit score. The model has no say in the value.
 
-    Reads the `verified` flags already set by the citation check; None counts as unverified.
+    Pipeline code calls `recommend`, which runs the citation check first. This function only
+    reads the `verified` flags that check has set; None counts as unverified.
     A knock-out is verified when both its own citation and its match's tender citation are.
 
     Formal knock-outs are ignored: they are actions in the bid, not matched. With only formal
     knock-outs the rules see none, and a match for a formal one has no knock-out to belong to.
+
+    A `not_met` knock-out that applies to named lots only (`applies_to_lots` not empty) gives
+    `needs_review` with `lot_specific_knockout`, whatever its mitigation (decision R9).
     """
     if documents_missing:
         return RecommendationResult("needs_review", ("documents_missing",))
@@ -154,6 +170,13 @@ def decide_recommendation(
             _add(review, "knockout_unmatched")
             continue
         verified = knockout.citation.verified is True and match.tender_citation.verified is True
+        if match.status == "not_met" and knockout.applies_to_lots:
+            # Interim rule while Q8 (one memo per tender or per lot) is open: the requirement
+            # may rule out one lot only, so it never gives no_bid or a cap for the tender.
+            _add(review, "lot_specific_knockout")
+            if not verified:
+                _add(review, "knockout_citation_unverified")
+            continue
         if match.status == "not_met" and match.mitigation == "none":
             if verified:
                 confirmed_not_met = True
@@ -189,3 +212,30 @@ def decide_recommendation(
     if not {"awaiting_human_scores", "fit_score_incomplete"} & set(reasons):
         reasons.append("fit_score_incomplete")
     return RecommendationResult("needs_review", tuple(reasons))
+
+
+def recommend(
+    *,
+    knockouts: Sequence[KnockoutCriterion],
+    matches: Sequence[RequirementMatch],
+    dimensions: Iterable[FitDimension],
+    documents_missing: bool,
+    pages: PageLookup,
+    redactor: Redactor,
+) -> CheckedRecommendation:
+    """Check every citation against its stored page, then score the fit and decide.
+
+    This is the entry point for pipeline code. The `verified` flags that the rules read are
+    set here, from the page text, whatever the inputs held before. `redactor` is the one used
+    for the model calls that produced the quotes.
+    """
+    checked_knockouts = tuple(verify_citations(k, pages, redactor) for k in knockouts)
+    checked_matches = tuple(verify_citations(m, pages, redactor) for m in matches)
+    fit = compute_fit(verify_citations(d, pages, redactor) for d in dimensions)
+    result = decide_recommendation(
+        knockouts=checked_knockouts,
+        matches=checked_matches,
+        fit=fit,
+        documents_missing=documents_missing,
+    )
+    return CheckedRecommendation(checked_knockouts, checked_matches, fit, result)

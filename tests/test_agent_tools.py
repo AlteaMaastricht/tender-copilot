@@ -271,6 +271,8 @@ def test_agent_package_has_no_write_path_and_no_sdk():
         {"achternaam": "de Vries"},
         {"first_name": "Jan"},
         {"lastName": "de Vries"},
+        {"First Name": "Jan", "Last-Name": "de Vries"},
+        {"aanspreekpunt": {"first": "Jan", "last": "de Vries"}},  # under a person only
         {"surname": "de Vries"},
         {"aanspreekpunt": {"naam": "Jan de Vries"}},
         {"aanspreekpunt": {"Naam": "Jan de Vries", "organisatie": "Gemeente"}},
@@ -305,7 +307,10 @@ def test_dutch_and_english_contact_keys_are_blocked(result):
         {"title": "Hotelovernachtingen en catering"},  # 'tel' inside a word
         {"titel": "Mailingservice", "contract_value": 100},  # 'contract' is not 'contact'
         {"mailing_lijst": "nee"},  # 'mailing' is not the word 'mail'
-        {"lastig": True, "lasten": 3},  # 'last' only as a whole word
+        {"lastig": True, "lasten": 3},
+        {"last_updated": "2026-11-01"},  # 'first' and 'last' alone say nothing about a person
+        {"first_page": 1, "page_last": 14, "lastModified": "2026-11-01"},
+        {"documents": [{"first_seen": "2026-11-01", "is_last_version": True}]},
         {"section": "4.2 Telefonische bereikbaarheid"},  # text values are not checked here
     ],
 )

@@ -9,8 +9,14 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import date, datetime
+from dataclasses import dataclass
+from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
+
+# Dutch tenders close on Dutch clock time. A value without an offset is read in this zone,
+# and a value with one is converted to it before its date is taken.
+AMSTERDAM = ZoneInfo("Europe/Amsterdam")
 
 # Text that means "no value" in TenderNed exports and API fields (compared lower-case).
 PLACEHOLDER_TEXTS = frozenset({"", "none", "nan", "nat", "null", "-", "n.v.t.", "nvt", "onbekend"})
@@ -22,6 +28,19 @@ MAX_PLAUSIBLE_AMOUNT = Decimal("1e10")
 MIN_TENDER_VALUE = Decimal("100")
 
 CURRENCIES = frozenset({"EUR", "USD", "GBP", "CHF", "DKK", "SEK", "NOK", "PLN"})
+
+# ISO 3166-1 alpha-3 to alpha-2, for the codes eForms notices carry (EU, EFTA, neighbours,
+# the Caribbean Netherlands). A code missing here is stored as None with its raw value kept.
+_ALPHA3_TO_ALPHA2 = {
+    "AUT": "AT", "BEL": "BE", "BGR": "BG", "HRV": "HR", "CYP": "CY", "CZE": "CZ", "DNK": "DK",
+    "EST": "EE", "FIN": "FI", "FRA": "FR", "DEU": "DE", "GRC": "GR", "HUN": "HU", "IRL": "IE",
+    "ITA": "IT", "LVA": "LV", "LTU": "LT", "LUX": "LU", "MLT": "MT", "NLD": "NL", "POL": "PL",
+    "PRT": "PT", "ROU": "RO", "SVK": "SK", "SVN": "SI", "ESP": "ES", "SWE": "SE",
+    "ISL": "IS", "LIE": "LI", "NOR": "NO", "CHE": "CH", "GBR": "GB",
+    "ALB": "AL", "BIH": "BA", "MDA": "MD", "MKD": "MK", "MNE": "ME", "SRB": "RS", "TUR": "TR",
+    "UKR": "UA", "USA": "US", "CAN": "CA",
+    "ABW": "AW", "CUW": "CW", "SXM": "SX", "BES": "BQ",
+}  # fmt: skip
 
 MIN_YEAR = 1995
 MAX_YEAR = 2100
@@ -39,12 +58,9 @@ _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?")
 _WORD_RE = re.compile(r"[a-z]+")
 
 # Day-first only: no format puts the month first, so 03-04-2026 is 3 April.
-_DATE_FORMATS = (
-    "%Y-%m-%d",
-    "%d-%m-%Y",
-    "%d/%m/%Y",
-    "%Y-%m-%dT%H:%M:%S",
-    "%Y-%m-%d %H:%M:%S",
+_DAY_FIRST_DATES = ("%d-%m-%Y", "%d/%m/%Y")
+_DAY_FIRST_TIMES = tuple(
+    f"{day} {clock}" for day in _DAY_FIRST_DATES for clock in ("%H:%M", "%H:%M:%S")
 )
 
 _DAY = 12.0 / 365
@@ -171,6 +187,21 @@ def parse_currency(value: object) -> str | None:
     return None
 
 
+def country_alpha2(value: object) -> str | None:
+    """`NLD`, `nld` or `NL` -> `NL` (ISO 3166-1 alpha-2, the form of `tenders.country`).
+
+    eForms uses alpha-3. None for an empty value or a code that is not in the table; the
+    caller keeps the raw value next to the result.
+    """
+    text = _clean_text(value)
+    if text is None:
+        return None
+    code = text.upper()
+    if len(code) == 2 and code.isascii() and code.isalpha():
+        return code
+    return _ALPHA3_TO_ALPHA2.get(code)
+
+
 def parse_duration_months(term: object, unit: object = None) -> float | None:
     """Parse `4 Jaren` or (`36`, `Maanden`) into months; a bare number means months."""
     combined = " ".join(t for t in (_clean_text(term), _clean_text(unit)) if t).lower()
@@ -189,29 +220,102 @@ def parse_duration_months(term: object, unit: object = None) -> float | None:
     return months if 0 < months <= MAX_DURATION_MONTHS else None
 
 
+def _strptime(text: str, formats: tuple[str, ...]) -> datetime | None:
+    for fmt in formats:
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _local_moment(text: str) -> tuple[datetime, bool] | None:
+    """(the moment in Amsterdam time, whether the text gave a time of day).
+
+    Read: ISO dates and datetimes, with or without milliseconds and a UTC offset
+    (`2026-04-19T22:00:00Z`), and day-first Dutch forms (`20-04-2026`, `20-04-2026 12:00`).
+    A date alone gives the start of that day.
+    """
+    try:
+        return datetime.combine(date.fromisoformat(text), time(0), AMSTERDAM), False
+    except ValueError:
+        pass
+    if (day := _strptime(text, _DAY_FIRST_DATES)) is not None:
+        return day.replace(tzinfo=AMSTERDAM), False
+    try:
+        moment: datetime | None = datetime.fromisoformat(text)
+    except ValueError:
+        moment = _strptime(text, _DAY_FIRST_TIMES)
+    if moment is None:
+        return None
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=AMSTERDAM), True
+    return moment.astimezone(AMSTERDAM), True
+
+
+def _plausible_year(day: date) -> bool:
+    return MIN_YEAR <= day.year <= MAX_YEAR
+
+
 def parse_date(value: object) -> date | None:
-    """Parse an ISO, DD-MM-YYYY or datetime value into a date (day-first, never month-first)."""
+    """Parse an ISO, DD-MM-YYYY or datetime value into a date (day-first, never month-first).
+
+    A value with a UTC offset gives the date in Amsterdam: `2026-04-19T22:00:00Z` is 20 April.
+    """
     if isinstance(value, datetime):
-        parsed: date | None = value.date()
+        parsed: date | None = (
+            value.astimezone(AMSTERDAM) if value.tzinfo is not None else value
+        ).date()
     elif isinstance(value, date):
         parsed = value
     else:
         text = _clean_text(value)
-        if text is None:
-            return None
-        # Drop milliseconds and time-zone offsets: `2026-09-11T14:32:00.677+02:00`.
-        text = text[:19]
-        parsed = None
-        for fmt in _DATE_FORMATS:
-            try:
-                parsed = datetime.strptime(text, fmt).date()
-                break
-            except ValueError:
-                continue
+        found = _local_moment(text) if text is not None else None
+        parsed = found[0].date() if found is not None else None
 
-    if parsed is None or not MIN_YEAR <= parsed.year <= MAX_YEAR:
+    if parsed is None or not _plausible_year(parsed):
         return None
     return parsed
+
+
+@dataclass(frozen=True, slots=True)
+class Closing:
+    """A parsed TenderNed `sluitingsDatum`."""
+
+    moment: datetime  # Europe/Amsterdam; the start of the day when `has_time` is False
+    has_time: bool
+
+    @property
+    def day(self) -> date:
+        return self.moment.date()
+
+    def is_closed(self, now: datetime) -> bool:
+        """Has the tender closed at `now`? A tender that closed earlier today is closed.
+
+        A closing date without a time stays open for that whole day.
+        """
+        if now.tzinfo is None:
+            raise ValueError("now must be timezone-aware")
+        local = now.astimezone(AMSTERDAM)
+        return self.moment <= local if self.has_time else self.day < local.date()
+
+
+def parse_sluitingsdatum(value: object) -> Closing | None:
+    """The one parser for TenderNed `sluitingsDatum`, used by the hard filter and the evals.
+
+    None for an empty, placeholder-text or unreadable value. The placeholder date 2099-12-31
+    is parsed like any other; `is_placeholder_deadline` decides on it.
+    """
+    text = _clean_text(value) if isinstance(value, str) else None
+    found = _local_moment(text) if text is not None else None
+    if found is None or not _plausible_year(found[0].date()):
+        return None
+    return Closing(*found)
+
+
+def start_of_day(day: date) -> datetime:
+    """Midnight at the start of `day` in Amsterdam, for callers that only know a date."""
+    return datetime.combine(day, time(0), AMSTERDAM)
 
 
 # Closing dates that mean "unknown" (ARCHITECTURE.md 2.3, DECISIONS.md data findings).

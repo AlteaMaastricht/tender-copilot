@@ -26,6 +26,7 @@ What the reason codes mean:
 - `knockout_citation_unverified`: a knock-out citation could not be verified.
 - `knockout_unclear`: a knock-out could not be assessed.
 - `knockout_awaiting_qa`: a knock-out depends on the buyer's answer to a question.
+- `lot_specific_knockout`: a knock-out that applies to some lots only is not met. It may rule out those lots and not the whole tender, so a person must decide which lots to bid for.
 - `knockout_unmatched`, `match_without_knockout`, `duplicate_requirement_id`: the knock-out table is inconsistent.
 - `knockout_gap_closable`: a knock-out gap can be closed with a partner or before the closing date.
 - `fit_bid`, `fit_bid_conditional`, `fit_no_bid`: the fit score decided.

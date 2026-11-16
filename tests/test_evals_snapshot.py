@@ -159,6 +159,20 @@ def test_deadline_truth():
     assert not has_time and day == datetime(2026, 6, 15, tzinfo=AMSTERDAM)
     for unknown in (None, "", "onbekend", "2099-12-31", "2040-01-01"):  # missing or placeholder
         assert deadline_truth(unknown, published) == (None, False)
+    # A UTC value is the same moment, shown in Amsterdam time: the 20th, not the 19th.
+    utc, has_time = deadline_truth("2026-04-19T22:00:00Z", published)
+    assert has_time and utc.isoformat() == "2026-04-20T00:00:00+02:00"
+    dutch, has_time = deadline_truth("20-04-2026 12:00", published)
+    assert has_time and dutch == moment
+
+
+def test_the_evals_and_the_hard_filter_read_the_closing_date_the_same_way():
+    from ingest.parsing import parse_sluitingsdatum
+
+    published = date(2026, 3, 2)
+    for raw in ("2026-04-19T22:00:00Z", "2026-04-20T12:00:00", "2026-06-15", "20-04-2026 12:00"):
+        closing = parse_sluitingsdatum(raw)
+        assert deadline_truth(raw, published) == (closing.moment, closing.has_time)
 
 
 def test_ground_truth_comes_from_the_notice_and_tenderned():

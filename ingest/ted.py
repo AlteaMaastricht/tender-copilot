@@ -6,7 +6,9 @@ Notes:
 - `TedNotice.deadline` is the notice's own deadline (BT-131 (confirm), else BT-1311 (confirm)). Per
   ARCHITECTURE.md 2.2 and 6.1 it is eForms ground truth only and never `deadline_at`,
   which comes from TenderNed `sluitingsDatum`.
-- Contact points (`cac:Contact`) are never read; the records hold no personal data.
+- Contact points (`cac:Contact`) are read only by `parse_contacts`, into `TedContact` rows for
+  the `contacts` table. `parse_notice` never reads them: `TedNotice`, `TedBuyer` and `TedLot`
+  hold no personal data, so nothing built from a notice can carry a contact to a model.
 - A change notice is linked to its original by procedure ID (BT-04 (confirm)) plus the changed
   notice identifier (BT-758 (confirm)), never by title or buyer.
 """
@@ -16,14 +18,16 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal
 
 from ingest.parsing import (
+    AMSTERDAM,
     PLACEHOLDER_DEADLINE,
+    country_alpha2,
     is_placeholder_deadline,
     parse_currency,
     parse_duration_months,
@@ -45,8 +49,10 @@ EXT = "ext:UBLExtensions/ext:UBLExtension/ext:ExtensionContent/efext:EformsExten
 
 _PUBLICATION_ID_RE = re.compile(r"(\d+)-(\d{4})")
 _CHANGED_NOTICE_RE = re.compile(r"(.+)-(\d{2})")
+_UTC_OFFSET_RE = re.compile(r"(?:Z|[+-]\d{2}:\d{2})$")
 
 DeadlineKind = Literal["tender", "participation"]
+ContactRole = Literal["buyer", "review_body", "other"]
 DeadlineStatus = Literal["ok", "missing", "placeholder"]
 
 
@@ -58,7 +64,8 @@ class TedParseError(ValueError):
 class TedBuyer:
     org_id: str  # e.g. ORG-0001
     name: str | None  # BT-500 (confirm)
-    country: str | None  # BT-514 (confirm), ISO alpha-3 as in eForms
+    country: str | None  # BT-514 (confirm) as ISO alpha-2, e.g. NL; None if unrecognised
+    country_raw: str | None  # the value in the notice, ISO alpha-3 in eForms, e.g. NLD
     legal_type: str | None  # BT-11 (confirm)
 
 
@@ -73,7 +80,8 @@ class TedLot:
     duration_months: float | None  # BT-36 (confirm)
     tender_deadline: datetime | None  # BT-131 (confirm); None if missing or a placeholder
     participation_deadline: datetime | None  # BT-1311 (confirm); None if missing or a placeholder
-    place_country: str | None  # BT-5141 (confirm)
+    place_country: str | None  # BT-5141 (confirm) as ISO alpha-2; None if unrecognised
+    place_country_raw: str | None  # the value in the notice, e.g. NLD
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +100,8 @@ class TedNotice:
     title: str | None  # BT-21 (confirm)
     buyers: tuple[TedBuyer, ...]
     buyer_name: str | None  # first buyer
-    country: str | None  # first buyer's country, ISO alpha-3
+    country: str | None  # first buyer's country, ISO alpha-2 (`tenders.country`), e.g. NL
+    country_raw: str | None  # the same value as written in the notice, e.g. NLD
     main_nature: str | None  # BT-23 (confirm)
     procedure_type: str | None  # BT-105 (confirm)
     cpv_main: str | None  # BT-262 (confirm)
@@ -113,6 +122,22 @@ class TedNotice:
     @property
     def is_change(self) -> bool:
         return self.changed_notice_id is not None
+
+
+@dataclass(frozen=True, slots=True)
+class TedContact:
+    """One row for the `contacts` table (ARCHITECTURE.md section 3). Personal data.
+
+    Used only to store the row and to build the `Redactor`. Never model input, never a tool
+    result, never a field of `TedNotice`. The personal fields are kept out of `repr`, so a
+    logged record does not show them.
+    """
+
+    org_name: str | None  # BT-500 (confirm): an organisation, not a person
+    role: ContactRole
+    contact_name: str | None = field(repr=False)  # BT-502 (confirm)
+    email: str | None = field(repr=False)  # BT-506 (confirm)
+    phone: str | None = field(repr=False)  # BT-503 (confirm)
 
 
 # --- small readers ------------------------------------------------------------
@@ -149,15 +174,23 @@ def _eforms_date(text: str | None) -> date | None:
 
 
 def _eforms_datetime(date_text: str | None, time_text: str | None) -> datetime | None:
-    """Combine EndDate `2026-11-17+01:00` and EndTime `12:00:00+01:00` into an aware datetime."""
+    """Combine EndDate `2026-11-17+01:00` and EndTime `12:00:00+01:00` into an aware datetime.
+
+    The result always has a time zone, so deadlines of different lots can be compared. An
+    EndTime without an offset takes the offset of EndDate; with no offset on either, the
+    value is read as Amsterdam time.
+    """
     day = _eforms_date(date_text)
     if day is None:
         return None
-    time_part = time_text or f"00:00:00{(date_text or '')[10:]}"
+    time_part = time_text or "00:00:00"
+    if not _UTC_OFFSET_RE.search(time_part):
+        time_part += (date_text or "")[10:]
     try:
-        return datetime.fromisoformat(f"{day.isoformat()}T{time_part}")
+        moment = datetime.fromisoformat(f"{day.isoformat()}T{time_part}")
     except ValueError:
         return None
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=AMSTERDAM)
 
 
 def _amount(node: ET.Element | None) -> tuple[Decimal | None, str | None]:
@@ -282,6 +315,9 @@ def _parse_lot(
         if d is not None
     ]
     by_kind = {d.kind: d.value for d in deadlines}
+    place_country = _find_text(
+        project, "cac:RealizedLocation/cac:Address/cac:Country/cbc:IdentificationCode"
+    )
     record = TedLot(
         lot_id=_find_text(lot, "cbc:ID") or "",
         title=_pick_language([] if project is None else project.findall("cbc:Name", NS), language),
@@ -296,9 +332,8 @@ def _parse_lot(
         ),
         tender_deadline=by_kind.get("tender"),
         participation_deadline=by_kind.get("participation"),
-        place_country=_find_text(
-            project, "cac:RealizedLocation/cac:Address/cac:Country/cbc:IdentificationCode"
-        ),
+        place_country=country_alpha2(place_country),
+        place_country_raw=place_country,
     )
     return record, deadlines
 
@@ -315,6 +350,7 @@ def _parse_buyers(root: ET.Element, language: str | None) -> tuple[TedBuyer, ...
         if not org_id:
             continue
         company = companies.get(org_id)
+        country = _find_text(company, "cac:PostalAddress/cac:Country/cbc:IdentificationCode")
         buyers.append(
             TedBuyer(
                 org_id=org_id,
@@ -322,7 +358,8 @@ def _parse_buyers(root: ET.Element, language: str | None) -> tuple[TedBuyer, ...
                     [] if company is None else company.findall("cac:PartyName/cbc:Name", NS),
                     language,
                 ),
-                country=_find_text(company, "cac:PostalAddress/cac:Country/cbc:IdentificationCode"),
+                country=country_alpha2(country),
+                country_raw=country,
                 legal_type=_find_text(party, "cac:ContractingPartyType/cbc:PartyTypeCode"),
             )
         )
@@ -332,14 +369,65 @@ def _parse_buyers(root: ET.Element, language: str | None) -> tuple[TedBuyer, ...
 # --- public API ---------------------------------------------------------------
 
 
-def parse_notice(xml: bytes) -> TedNotice:
-    """Parse one eForms contract notice. Raises TedParseError if it cannot be keyed."""
+def _notice_root(xml: bytes) -> ET.Element:
     try:
         root = ET.fromstring(xml)
     except ET.ParseError as exc:
         raise TedParseError(f"not XML: {exc}") from None
     if root.tag != CONTRACT_NOTICE_TAG:
         raise TedParseError(f"not an eForms contract notice: root {root.tag}")
+    return root
+
+
+def parse_contacts(xml: bytes) -> tuple[TedContact, ...]:
+    """The contact points of a notice, as rows for the `contacts` table.
+
+    Kept apart from `parse_notice` on purpose: the two results are never combined. One row
+    per `cac:Contact` of an organisation or of one of its touch points that holds a name, an
+    email address or a phone number.
+    """
+    root = _notice_root(xml)
+    language = _find_text(root, "cbc:NoticeLanguageCode")
+    party_id = "cac:PartyIdentification/cbc:ID"
+    buyer_ids = {
+        text
+        for party in root.findall("cac:ContractingParty/cac:Party", NS)
+        if (text := _find_text(party, party_id))
+    }
+    review_ids = {
+        text for node in root.findall(".//cac:AppealTerms//cbc:ID", NS) if (text := _text(node))
+    }
+
+    rows: list[TedContact] = []
+    for organisation in root.findall(f"{EXT}/efac:Organizations/efac:Organization", NS):
+        company = organisation.find("efac:Company", NS)
+        company_id = _find_text(company, party_id)
+        company_name = _pick_language(
+            [] if company is None else company.findall("cac:PartyName/cbc:Name", NS), language
+        )
+        parties = [] if company is None else [company]
+        for party in (*parties, *organisation.findall("efac:TouchPoint", NS)):
+            ids = {company_id, _find_text(party, party_id)}
+            role: ContactRole = (
+                "buyer" if ids & buyer_ids else "review_body" if ids & review_ids else "other"
+            )
+            own_name = _pick_language(party.findall("cac:PartyName/cbc:Name", NS), language)
+            for contact in party.findall("cac:Contact", NS):
+                row = TedContact(
+                    org_name=own_name or company_name,
+                    role=role,
+                    contact_name=_find_text(contact, "cbc:Name"),
+                    email=_find_text(contact, "cbc:ElectronicMail"),
+                    phone=_find_text(contact, "cbc:Telephone"),
+                )
+                if (row.contact_name or row.email or row.phone) and row not in rows:
+                    rows.append(row)
+    return tuple(rows)
+
+
+def parse_notice(xml: bytes) -> TedNotice:
+    """Parse one eForms contract notice. Raises TedParseError if it cannot be keyed."""
+    root = _notice_root(xml)
 
     raw_publication_id = _find_text(root, f"{EXT}/efac:Publication/efbc:NoticePublicationID")
     notice_id = _find_text(root, "cbc:ID[@schemeName='notice-id']")
@@ -416,6 +504,7 @@ def parse_notice(xml: bytes) -> TedNotice:
         buyers=buyers,
         buyer_name=buyers[0].name if buyers else None,
         country=buyers[0].country if buyers else None,
+        country_raw=buyers[0].country_raw if buyers else None,
         main_nature=_find_text(project, "cbc:ProcurementTypeCode"),
         procedure_type=procedure_type,
         cpv_main=cpv_main,

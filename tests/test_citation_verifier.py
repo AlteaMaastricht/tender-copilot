@@ -189,3 +189,62 @@ def test_every_reason_code_is_reached():
     reached = {reason for _, reason in FAILS.values()}
     reached |= {"ok", "page_missing", "page_mismatch", "page_empty"}  # tested above
     assert reached == set(get_args(Reason))
+
+
+# --- split words and real hyphens in one quote ---------------------------------
+
+MIXED_PAGE = PageText(
+    DOC,
+    PAGE_NO,
+    "1.1 Inleiding\n"
+    "De aanbeste-\n"
+    "dingsleidraad beschrijft de ICT-\n"
+    "dienstverlening en het niet-ontvankelijk verklaren van inschrijvingen.\n"
+    "De looptijd is 2027-2029 en de norm is ISO 27001-\n"
+    "gecertificeerd.",
+)
+NO_BREAK_PAGE = PageText(
+    DOC, PAGE_NO, "De inschrijving wordt niet-ontvankelijk verklaard bij een te late indiening."
+)
+
+MIXED_PASSES = {
+    "split_word_then_real_hyphen": "De aanbestedingsleidraad beschrijft de ICT-dienstverlening",
+    "copied_with_both_line_breaks": (
+        "De aanbeste-\ndingsleidraad beschrijft de ICT-\ndienstverlening"
+    ),
+    "real_hyphen_dropped_by_the_model": "aanbestedingsleidraad beschrijft de ICTdienstverlening",
+    "runs_on_past_an_ordinary_hyphen": (
+        "aanbestedingsleidraad beschrijft de ICT-dienstverlening en het niet-ontvankelijk"
+    ),
+    "hyphen_after_a_digit_at_a_line_break": "de norm is ISO 27001-gecertificeerd",
+}
+
+
+@pytest.mark.parametrize("quote", MIXED_PASSES.values(), ids=MIXED_PASSES.keys())
+def test_a_quote_over_a_split_word_and_a_real_hyphen_passes(quote):
+    assert verify_citation(cite(quote), MIXED_PAGE) == CitationCheck(True, "ok")
+
+
+def test_each_half_passed_before_and_still_does():
+    assert verify_citation(cite("De aanbestedingsleidraad beschrijft"), MIXED_PAGE).passed
+    assert verify_citation(cite("beschrijft de ICT-dienstverlening"), MIXED_PAGE).passed
+
+
+MIXED_FAILS = {
+    "another_word": "De aanbestedingsleidraad omschrijft de ICT-dienstverlening",
+    "changed_year_range": "aanbestedingsleidraad beschrijft de ICT-dienstverlening 2027-2028",
+    "number_range_without_its_hyphen": "De looptijd is 20272029 en de norm",
+    "words_joined_across_a_space": "De aanbestedingsleidraadbeschrijft de ICT-dienstverlening",
+}
+
+
+@pytest.mark.parametrize("quote", MIXED_FAILS.values(), ids=MIXED_FAILS.keys())
+def test_the_fallback_is_not_fuzzy_matching(quote):
+    assert verify_citation(cite(quote), MIXED_PAGE) == CitationCheck(False, "not_found")
+
+
+def test_the_fallback_needs_a_hyphen_at_a_line_break():
+    # No line break is involved, so a dropped hyphen is a real difference and fails.
+    assert verify_citation(cite("wordt niet-ontvankelijk verklaard"), NO_BREAK_PAGE).passed
+    check = verify_citation(cite("wordt nietontvankelijk verklaard"), NO_BREAK_PAGE)
+    assert check == CitationCheck(False, "not_found")

@@ -15,9 +15,9 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from difflib import SequenceMatcher
 from typing import Any
-from zoneinfo import ZoneInfo
 
-AMSTERDAM = ZoneInfo("Europe/Amsterdam")
+from ingest.parsing import AMSTERDAM  # one definition of the zone, shared with the filter
+
 Z95 = 1.96
 
 SUITES = ("retrieval", "screening", "extraction", "knockout", "memo", "edge_cases")

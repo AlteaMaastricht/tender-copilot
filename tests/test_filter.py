@@ -4,17 +4,19 @@ Synthetic cases change a parsed fixture with dataclasses.replace; no new fixture
 """
 
 from dataclasses import replace
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
+from ingest.parsing import AMSTERDAM
 from ingest.ted import TedLot, TedNotice, parse_notice_file
 from pipeline.filter import apply_hard_filter
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "ted"
-TODAY = date(2026, 9, 18)  # a Friday; the earliest publication date in the fixtures
+# A Friday, 09:00 in Amsterdam; the earliest publication date in the fixtures.
+NOW = datetime(2026, 9, 18, 9, 0, tzinfo=AMSTERDAM)
 VALID_DEADLINE = "2026-12-31T12:00:00"  # TenderNed form; well after every publication
 
 
@@ -29,10 +31,13 @@ def base(notices: dict[str, TedNotice]) -> TedNotice:
     return notices["648029-2026"]
 
 
-def run(notice: TedNotice, deadline: str | None = VALID_DEADLINE, matched: bool = True):
-    return apply_hard_filter(
-        notice, sluitingsdatum=deadline, tenderned_matched=matched, today=TODAY
-    )
+def run(
+    notice: TedNotice,
+    deadline: str | None = VALID_DEADLINE,
+    matched: bool = True,
+    now: datetime = NOW,
+):
+    return apply_hard_filter(notice, sluitingsdatum=deadline, tenderned_matched=matched, now=now)
 
 
 def lot(lot_id: str, value: str | None, currency: str | None = "EUR", **kw: object) -> TedLot:
@@ -46,7 +51,8 @@ def lot(lot_id: str, value: str | None, currency: str | None = "EUR", **kw: obje
         "duration_months": None,
         "tender_deadline": None,
         "participation_deadline": None,
-        "place_country": "NLD",
+        "place_country": "NL",
+        "place_country_raw": "NLD",
     }
     return TedLot(**{**fields, **kw})
 
@@ -153,6 +159,60 @@ def test_closed_deadline_fails(base: TedNotice) -> None:
     assert not result.passed
 
 
+def at(hour: int, minute: int = 0) -> datetime:
+    return NOW.replace(hour=hour, minute=minute)
+
+
+CLOSED_TODAY = {
+    "an_hour_ago": ("2026-09-18T08:00:00", at(9), "closed"),
+    "this_very_minute": ("2026-09-18T09:00:00", at(9), "closed"),
+    "an_hour_ago_with_offset": ("2026-09-18T08:00:00+02:00", at(9), "closed"),
+    "an_hour_ago_in_utc": ("2026-09-18T06:00:00Z", at(9), "closed"),  # 08:00 in Amsterdam
+    "dutch_form": ("18-09-2026 08:00", at(9), "closed"),
+    "yesterday_late_utc_is_today": ("2026-09-17T22:30:00Z", at(0, 15), "open"),  # 00:30 today
+    "later_today": ("2026-09-18T17:00:00", at(9), "open"),
+    "later_today_in_utc": ("2026-09-18T08:00:00Z", at(9), "open"),  # 10:00 in Amsterdam
+    "date_only_today": ("2026-09-18", at(23, 59), "open"),  # no time: open the whole day
+    "date_only_yesterday": ("2026-09-17", at(0, 1), "closed"),
+}
+
+
+@pytest.mark.parametrize(
+    ("deadline", "now", "state"), CLOSED_TODAY.values(), ids=CLOSED_TODAY.keys()
+)
+def test_a_tender_that_closed_earlier_today_is_closed(
+    base: TedNotice, deadline: str, now: datetime, state: str
+) -> None:
+    notice = replace(base, publication_date=date(2026, 8, 3))  # long before: never too_short
+    rule = run(notice, deadline=deadline, now=now).rules["deadline"]
+    if state == "closed":
+        assert (rule.outcome, rule.reason, rule.raw) == ("fail", "closed", deadline)
+    else:
+        assert (rule.outcome, rule.reason) == ("pass", "ok")
+
+
+def test_now_is_compared_as_a_moment_whatever_its_zone(base: TedNotice) -> None:
+    notice = replace(base, publication_date=date(2026, 8, 3))
+    in_utc = datetime(2026, 9, 18, 7, 0, tzinfo=UTC)  # the same moment as NOW
+    for now in (NOW, in_utc):
+        assert run(notice, deadline="2026-09-18T08:59:00", now=now).rules["deadline"].reason == (
+            "closed"
+        )
+        assert run(notice, deadline="2026-09-18T09:01:00", now=now).rules["deadline"].reason == "ok"
+
+
+def test_a_utc_closing_time_counts_on_its_amsterdam_date(base: TedNotice) -> None:
+    # 2 Oct 22:00 UTC is 3 Oct 00:00 in Amsterdam: 11 working days after Fri 18 Sep, not 10.
+    notice = replace(base, publication_date=date(2026, 9, 18))
+    assert run(notice, deadline="2026-10-01T21:59:00Z").rules["deadline"].reason == "too_short"
+    assert run(notice, deadline="2026-10-01T22:00:00Z").rules["deadline"].reason == "ok"
+
+
+def test_a_naive_now_is_refused(base: TedNotice) -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        run(base, now=datetime(2026, 9, 18, 9, 0))
+
+
 @pytest.mark.parametrize(
     ("deadline", "outcome"),
     [("2026-10-02", "pass"), ("2026-10-01", "fail")],  # 10 and 9 working days after Fri 18 Sep
@@ -242,12 +302,56 @@ def test_notice_type(base: TedNotice, notice_type: str, outcome: str) -> None:
 
 
 def test_country(base: TedNotice) -> None:
-    belgian = run(replace(base, country="BEL"))
+    dutch = run(base).rules["country"]
+    assert (base.country, base.country_raw) == ("NL", "NLD")
+    assert (dutch.outcome, dutch.reason, dutch.raw) == ("pass", "nl", "NLD")  # raw as received
+
+    belgian = run(replace(base, country="BE", country_raw="BEL"))
     assert (belgian.rules["country"].outcome, belgian.passed) == ("fail", False)
-    assert run(replace(base, country=None)).rules["country"].outcome == "unknown"
-    abroad = run(with_lots(base, lot("LOT-1", "500000", place_country="DEU")))
+    assert belgian.rules["country"].raw == "BEL"
+    missing = run(replace(base, country=None, country_raw=None))
+    assert (missing.rules["country"].outcome, missing.rules["country"].reason) == (
+        "unknown",
+        "missing",
+    )
+    abroad = run(
+        with_lots(base, lot("LOT-1", "500000", place_country="DE", place_country_raw="DEU"))
+    )
     assert abroad.rules["country"].outcome == "pass"
     assert "place_outside_nl" in abroad.flags and abroad.passed
+
+
+@pytest.mark.parametrize("raw", ["XKX", "NLD", "Nederland"])
+def test_a_country_code_the_parser_could_not_map_is_unknown_never_a_fail(
+    base: TedNotice, raw: str
+) -> None:
+    # Only the stored alpha-2 code decides. Without one the country is not known.
+    result = run(replace(base, country=None, country_raw=raw))
+    rule = result.rules["country"]
+    assert (rule.outcome, rule.reason, rule.raw) == ("unknown", "unrecognised_code", raw)
+    assert result.passed and "unknown:country" in result.flags
+
+
+def test_an_unmapped_buyer_country_in_a_notice_is_unknown(notices: dict[str, TedNotice]) -> None:
+    from ingest.ted import parse_notice
+
+    xml = (FIXTURES / "648029-2026.xml").read_text(encoding="utf-8")
+    changed = xml.replace('listName="country">NLD<', 'listName="country">XKX<')
+    assert changed != xml
+    result = run(parse_notice(changed.encode("utf-8")))
+    assert result.rules["country"].outcome == "unknown" and result.passed
+    belgian = run(parse_notice(xml.replace('">NLD<', '">BEL<').encode("utf-8")))
+    assert belgian.rules["country"].reason == "not_nl" and not belgian.passed
+
+
+def test_place_of_performance_with_an_unmapped_code_is_flagged(base: TedNotice) -> None:
+    elsewhere = run(
+        with_lots(base, lot("LOT-1", "500000", place_country=None, place_country_raw="XKX"))
+    )
+    nowhere = run(
+        with_lots(base, lot("LOT-1", "500000", place_country=None, place_country_raw=None))
+    )
+    assert "place_outside_nl" in elsewhere.flags and "place_outside_nl" not in nowhere.flags
 
 
 def test_cpv(base: TedNotice) -> None:
@@ -269,7 +373,8 @@ def test_cpv(base: TedNotice) -> None:
 
 def test_unknowns_do_not_drop_and_one_fail_does(base: TedNotice) -> None:
     many_unknown = run(
-        replace(with_lots(base, lot("LOT-1", None)), country=None, cpv_codes=()), matched=False
+        replace(with_lots(base, lot("LOT-1", None)), country=None, country_raw=None, cpv_codes=()),
+        matched=False,
     )
     assert many_unknown.passed
     assert {"unknown:country", "unknown:deadline", "unknown:value"} <= set(many_unknown.flags)

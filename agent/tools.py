@@ -26,15 +26,19 @@ CONTACT_SUBSTRINGS = (
     "contact", "email", "phone", "telefoon", "mobiel", "mobile", "whatsapp",
     "voornaam", "achternaam", "firstname", "lastname", "surname",
 )  # fmt: skip
-# A key with one of these as a whole word is contact data (too short to match inside words):
-CONTACT_WORDS = frozenset({"mail", "tel", "telnr", "fax", "gsm", "sms", "first", "last"})
+# A key with one of these as a whole word is contact data (too short to match inside words).
+# "first" and "last" are not here: they blocked ordinary keys such as `last_updated` and
+# `first_page`. `first_name` and `lastName` are still caught as "firstname" and "lastname".
+CONTACT_WORDS = frozenset({"mail", "tel", "telnr", "fax", "gsm", "sms"})
 # Under a parent that stands for a person, these name a person and are contact data too:
 PERSON_PARENTS = (
     "aanspreekpunt", "persoon", "person", "behandelaar", "inkoper", "projectleider",
     "medewerker", "functionaris", "officer", "inlichtingen", "vertegenwoordiger",
     "representative", "ondertekenaar", "signatory",
 )  # fmt: skip
-NAME_WORDS = frozenset({"naam", "name", "initialen", "initials", "tussenvoegsel", "aanhef"})
+NAME_WORDS = frozenset(
+    {"naam", "name", "initialen", "initials", "tussenvoegsel", "aanhef", "first", "last"}
+)
 
 TenderDocType = Literal[
     "guideline", "requirements", "qa", "contract", "pricing", "form", "annex", "other"

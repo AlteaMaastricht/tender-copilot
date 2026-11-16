@@ -293,6 +293,54 @@ def test_several_review_reasons_are_all_reported_once():
     )
 
 
+# --- recommendation: a knock-out for some lots only (interim, Q8 open) ----------
+
+
+def lot_ko(n: int = 1, *, verified: bool | None = True) -> KnockoutCriterion:
+    return ko(n, verified=verified).model_copy(update={"applies_to_lots": ["LOT-0002"]})
+
+
+def test_not_met_for_named_lots_needs_review_instead_of_no_bid():
+    result = decide([lot_ko()], [match(status="not_met")])
+    assert result == ("needs_review", ("lot_specific_knockout",))
+    # The same answer for a requirement on every lot is still a no-bid.
+    assert decide([ko()], [match(status="not_met")]) == ("no_bid", ("knockout_not_met",))
+
+
+@pytest.mark.parametrize(
+    "mitigation",
+    ["consortium", "subcontractor", "third_party", "obtain_before_deadline", "ask_in_qa"],
+)
+def test_not_met_for_named_lots_needs_review_whatever_the_mitigation(mitigation):
+    result = decide([lot_ko()], [match(status="not_met", mitigation=mitigation)])
+    assert result == ("needs_review", ("lot_specific_knockout",))
+
+
+def test_a_lot_specific_knockout_that_is_met_or_unclear_follows_the_normal_rules():
+    assert decide([lot_ko()], [match()]) == ("bid", ("fit_bid",))
+    assert decide([lot_ko()], [match(status="unclear")]) == ("needs_review", ("knockout_unclear",))
+
+
+def test_a_tender_wide_no_bid_still_wins_over_a_lot_specific_knockout():
+    knockouts = [lot_ko(1), ko(2)]
+    matches = [match(1, "not_met"), match(2, "not_met")]
+    assert decide(knockouts, matches) == ("no_bid", ("knockout_not_met",))
+
+
+def test_an_unverified_lot_specific_knockout_reports_both_reasons():
+    result = decide([lot_ko(verified=False)], [match(status="not_met")])
+    assert result == ("needs_review", ("lot_specific_knockout", "knockout_citation_unverified"))
+
+
+def test_lot_specific_and_other_review_reasons_are_listed_together():
+    knockouts = [lot_ko(1), ko(2)]
+    matches = [match(1, "not_met"), match(2, "unclear")]
+    assert decide(knockouts, matches) == (
+        "needs_review",
+        ("lot_specific_knockout", "knockout_unclear"),
+    )
+
+
 # --- recommendation: closable gap as a ceiling ---------------------------------
 
 CLOSABLE = ["consortium", "subcontractor", "third_party", "obtain_before_deadline"]

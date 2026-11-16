@@ -14,13 +14,18 @@ from pathlib import Path
 import pytest
 
 from ingest.ted import (
+    TedBuyer,
+    TedContact,
+    TedLot,
     TedNotice,
     TedParseError,
     find_original,
     group_by_procedure,
+    parse_contacts,
     parse_notice,
     parse_notice_file,
 )
+from llm.redact import Redactor
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "ted"
 XML_FILES = sorted(FIXTURES.glob("*.xml"))
@@ -116,7 +121,8 @@ def test_notice_fields(
     assert n.procedure_type == procedure
     assert n.cpv_main == cpv
     assert n.buyer_name is not None and n.buyer_name.startswith(buyer)
-    assert n.country == "NLD"
+    assert (n.country, n.country_raw) == ("NL", "NLD")  # alpha-2 stored, raw value kept
+    assert all((b.country, b.country_raw) == ("NL", "NLD") for b in n.buyers)
     assert n.estimated_value == value
     assert n.deadline is not None and n.deadline.date() == deadline
     assert n.deadline_kind == kind
@@ -268,6 +274,36 @@ def test_plain_contract_notice_is_not_a_change(notices: dict[str, TedNotice]) ->
     assert find_original(n, list(notices.values())) is None
 
 
+# --- country codes ------------------------------------------------------------
+
+
+def _set_buyer_country(text: str, code: str) -> str:
+    changed, count = re.subn(
+        r'(<cbc:IdentificationCode listName="country">)NLD(</cbc:IdentificationCode>)',
+        rf"\g<1>{code}\g<2>",
+        text,
+    )
+    assert count >= 1
+    return changed
+
+
+@pytest.mark.parametrize(
+    ("raw", "stored"), [("BEL", "BE"), ("DEU", "DE"), ("nld", "NL"), ("NL", "NL"), ("XKX", None)]
+)
+def test_country_is_stored_as_alpha_2_with_the_raw_value_kept(raw: str, stored: str | None) -> None:
+    n = _parse_text(_set_buyer_country(_xml("648029-2026"), raw))
+    assert (n.country, n.country_raw) == (stored, raw)
+    assert (n.buyers[0].country, n.buyers[0].country_raw) == (stored, raw)
+
+
+def test_every_fixture_stores_a_two_letter_country(notices: dict[str, TedNotice]) -> None:
+    for n in notices.values():
+        assert n.country is not None and len(n.country) == 2 and n.country_raw is not None
+        for lot in n.lots:
+            assert lot.place_country is None or len(lot.place_country) == 2
+            assert (lot.place_country is None) == (lot.place_country_raw is None)
+
+
 # --- contacts -----------------------------------------------------------------
 
 
@@ -284,8 +320,107 @@ def test_contact_blocks_are_ignored() -> None:
 
 
 def test_records_have_no_contact_fields() -> None:
-    names = {f.name for f in dataclasses.fields(TedNotice)}
-    assert not names & {"contact", "contacts", "email", "phone", "telephone"}
+    for record in (TedNotice, TedBuyer, TedLot):
+        names = {f.name for f in dataclasses.fields(record)}
+        assert not names & {"contact", "contacts", "contact_name", "email", "phone", "telephone"}
+        assert not any("TedContact" in str(f.type) for f in dataclasses.fields(record))
+
+
+# The saved fixtures have no contact blocks (they are removed at download), so the blocks
+# below are added in memory. Every name, address and number is invented.
+BUYER_CONTACT = (
+    "<cac:Contact><cbc:Name>Sanne van der Berg</cbc:Name>"
+    "<cbc:Telephone>+31 00 000 0000</cbc:Telephone>"
+    "<cbc:ElectronicMail>s.vanderberg@voorbeeld.example</cbc:ElectronicMail></cac:Contact>"
+)
+TOUCHPOINT_CONTACT = (
+    "<cac:Contact><cbc:Name>Afdeling Inkoop</cbc:Name>"
+    "<cbc:ElectronicMail>inkoop@voorbeeld.example</cbc:ElectronicMail></cac:Contact>"
+)
+EMPTY_CONTACT = "<cac:Contact><cbc:Name> </cbc:Name></cac:Contact>"
+
+
+def _with_contacts() -> tuple[str, str]:
+    """(fixture text, the same text with three contact blocks added)."""
+    text = _xml("643202-2026")
+    injected = text.replace("</efac:Company>", BUYER_CONTACT + "</efac:Company>", 1)
+    injected = injected.replace(
+        "</efac:TouchPoint>", TOUCHPOINT_CONTACT + EMPTY_CONTACT + "</efac:TouchPoint>", 1
+    )
+    assert injected.count("<cac:Contact>") == 3
+    return text, injected
+
+
+def test_fixtures_without_contact_blocks_give_no_contacts() -> None:
+    for path in XML_FILES:
+        assert parse_contacts(path.read_bytes()) == ()
+
+
+def test_contacts_are_parsed_into_their_own_records() -> None:
+    text, injected = _with_contacts()
+    notice = _parse_text(injected)
+    contacts = parse_contacts(injected.encode("utf-8"))
+
+    assert len(contacts) == 2  # the block without a name, email or phone gives no row
+    person, department = contacts
+    assert isinstance(person, TedContact)
+    assert person.contact_name == "Sanne van der Berg"
+    assert person.email == "s.vanderberg@voorbeeld.example"
+    assert person.phone == "+31 00 000 0000"
+    assert person.org_name == notice.buyers[0].name and person.role == "buyer"
+    assert department.contact_name == "Afdeling Inkoop" and department.phone is None
+    assert department.org_name == "Rechtbank Zeeland en West Brabant"  # the touch point's own
+
+    # The notice record is the same with or without the blocks, and holds none of the data.
+    assert notice == _parse_text(text)
+    as_text = repr(notice)
+    for planted in ("Sanne", "van der Berg", "voorbeeld.example", "+31 00 000 0000"):
+        assert planted not in as_text
+
+
+def test_a_contact_record_does_not_show_personal_data_when_printed() -> None:
+    _, injected = _with_contacts()
+    shown = repr(parse_contacts(injected.encode("utf-8")))
+    assert "role='buyer'" in shown
+    for planted in ("Sanne", "Berg", "voorbeeld.example", "+31 00", "Afdeling Inkoop"):
+        assert planted not in shown
+
+
+def test_parse_contacts_rejects_what_parse_notice_rejects() -> None:
+    with pytest.raises(TedParseError):
+        parse_contacts(b"<not-a-notice/>")
+    with pytest.raises(TedParseError):
+        parse_contacts(b"not xml")
+
+
+def test_the_redactor_is_built_from_the_contact_records() -> None:
+    _, injected = _with_contacts()
+    notice = _parse_text(injected)
+    contacts = parse_contacts(injected.encode("utf-8"))
+    redactor = Redactor.from_contacts(contacts, organisations=[b.name for b in notice.buyers])
+
+    buyer = notice.buyers[0].name
+    text = (
+        f"Aanbestedende dienst: {buyer}. Contactpersoon: Sanne van der Berg "
+        f"(mevrouw Van der Berg, S. van der Berg). De afdeling inkoop van "
+        f"Rechtbank Zeeland en West Brabant beantwoordt vragen."
+    )
+    assert redactor.redact(text) == (
+        f"Aanbestedende dienst: {buyer}. Contactpersoon: [NAME] "
+        f"([NAME], [NAME]). De afdeling inkoop van "
+        f"Rechtbank Zeeland en West Brabant beantwoordt vragen."
+    )
+    assert "Berg" not in repr(redactor)
+
+
+def test_a_contact_name_that_is_the_organisation_itself_is_not_redacted() -> None:
+    row = TedContact(
+        org_name="Voorbeeld Staete", role="buyer", contact_name="Voorbeeld Staete",
+        email=None, phone=None,
+    )  # fmt: skip
+    text = "Opdrachtgever is Voorbeeld Staete."
+    assert Redactor.from_contacts([row]).redact(text) == text
+    assert Redactor(["Voorbeeld Staete"]).redact(text) == "Opdrachtgever is [NAME]."
 
 
 # --- multi-lot notice 688608-2026 (ZonMW, 3 lots) ------------------------------
@@ -309,7 +444,7 @@ def test_multi_lot_notice_lots(notices: dict[str, TedNotice]) -> None:
     assert tuple(lot.estimated_value for lot in n.lots) == LOT_VALUES
     assert {lot.currency for lot in n.lots} == {"EUR"}
     assert {lot.cpv_main for lot in n.lots} == {"79800000"}
-    assert {lot.place_country for lot in n.lots} == {"NLD"}
+    assert {(lot.place_country, lot.place_country_raw) for lot in n.lots} == {("NL", "NLD")}
     assert n.estimated_value == sum(LOT_VALUES)  # procedure-level BT-27 is the lot total here
     assert not n.is_change and n.warnings == ()
 
@@ -359,6 +494,42 @@ def test_placeholder_lot_deadline_is_skipped_for_the_earliest() -> None:
     assert n.deadline == datetime(2026, 11, 20, 16, 0, tzinfo=UTC) == n.lots[2].tender_deadline
     assert n.deadline_status == "ok"
     assert "placeholder:deadline" not in n.warnings
+
+
+def _set_lot_end_times(text: str, end_times: list[str]) -> str:
+    """Give each lot's BT-131 EndTime a new value, in lot order (in memory only)."""
+    pattern = re.compile(
+        r"(<cac:TenderSubmissionDeadlinePeriod>\s*<cbc:EndDate>[^<]*</cbc:EndDate>\s*"
+        r"<cbc:EndTime>)[^<]*(</cbc:EndTime>)"
+    )
+    assert len(pattern.findall(text)) == len(end_times)
+    values = iter(end_times)
+    return pattern.sub(lambda m: f"{m.group(1)}{next(values)}{m.group(2)}", text)
+
+
+def test_an_end_time_without_an_offset_takes_the_offset_of_the_end_date() -> None:
+    # Lot 1 has no offset on EndTime, lot 2 has one, lot 3 uses Z. Before the fix this mix
+    # of naive and aware values raised TypeError in the earliest-deadline comparison.
+    text = _set_lot_end_dates(
+        _xml(MULTI_LOT), ["2026-11-23+01:00", "2026-11-23+01:00", "2026-11-23+01:00"]
+    )
+    n = _parse_text(_set_lot_end_times(text, ["12:00:00", "13:00:00+01:00", "10:30:00Z"]))
+    assert [lot.tender_deadline for lot in n.lots] == [
+        datetime(2026, 11, 23, 12, 0, tzinfo=CET),
+        datetime(2026, 11, 23, 13, 0, tzinfo=CET),
+        datetime(2026, 11, 23, 10, 30, tzinfo=UTC),
+    ]
+    assert all(lot.tender_deadline.tzinfo is not None for lot in n.lots)
+    assert n.deadline == datetime(2026, 11, 23, 10, 30, tzinfo=UTC)  # 11:30 CET: the earliest
+    assert n.deadline_status == "ok"
+
+
+def test_a_deadline_with_no_offset_at_all_is_read_as_amsterdam_time() -> None:
+    text = _set_lot_end_dates(_xml(MULTI_LOT), ["2026-11-23", "2026-07-06", "2026-11-23+01:00"])
+    n = _parse_text(_set_lot_end_times(text, ["12:00:00", "12:00:00", "12:00:00"]))
+    assert n.lots[0].tender_deadline == datetime(2026, 11, 23, 12, 0, tzinfo=CET)  # winter
+    assert n.lots[1].tender_deadline == datetime(2026, 7, 6, 12, 0, tzinfo=CEST)  # summer
+    assert n.deadline == n.lots[1].tender_deadline
 
 
 def test_all_lot_deadlines_placeholder() -> None:

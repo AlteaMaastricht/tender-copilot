@@ -3,23 +3,24 @@
 No model calls, no network. Each rule gives pass, fail or unknown with a reason; a tender is
 dropped only on a definite fail. Unknown is not a pass: the tender continues with a flag.
 
-The deadline is TenderNed `sluitingsDatum`, passed in by the caller. The notice's own
-deadline (`TedNotice.deadline`) is eForms ground truth only and is never read here.
+The deadline is TenderNed `sluitingsDatum`, passed in by the caller and read in Amsterdam
+time (`ingest.parsing.parse_sluitingsdatum`). The notice's own deadline (`TedNotice.deadline`)
+is eForms ground truth only and is never read here.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
-from ingest.parsing import is_placeholder_deadline, parse_date
+from ingest.parsing import is_placeholder_deadline, parse_sluitingsdatum
 from ingest.ted import TedNotice
 
 Outcome = Literal["pass", "fail", "unknown"]
 
-NL_CODES = frozenset({"NLD", "NL"})
+NL = "NL"  # ISO alpha-2, as stored in `TedNotice.country` and `tenders.country`
 CPV_PREFIXES = ("72", "79", "48", "73")
 CONTRACT_NOTICE_TYPES = frozenset({"cn-standard", "cn-social"})
 NON_CONTRACT_PREFIXES = ("can-", "pin-")  # award notices, prior information notices
@@ -54,12 +55,16 @@ class FilterResult:
 
 
 def _country(notice: TedNotice) -> RuleResult:
-    country = notice.country
-    if not country:
+    """Compares the alpha-2 code. `raw` in the result is the value as the notice wrote it."""
+    raw = notice.country_raw or notice.country
+    if not raw:
         return RuleResult("unknown", "missing")
-    if country.upper() in NL_CODES:
-        return RuleResult("pass", "nl", country)
-    return RuleResult("fail", "not_nl", country)
+    if notice.country == NL:
+        return RuleResult("pass", "nl", raw)
+    if notice.country is None:
+        # Not in the conversion table: we do not know the country, so never a fail.
+        return RuleResult("unknown", "unrecognised_code", raw)
+    return RuleResult("fail", "not_nl", raw)
 
 
 def _cpv(notice: TedNotice, flags: list[str]) -> RuleResult:
@@ -87,24 +92,24 @@ def _working_days_after(start: date, end: date) -> int:
 
 
 def _deadline(
-    notice: TedNotice, sluitingsdatum: str | None, tenderned_matched: bool, today: date
+    notice: TedNotice, sluitingsdatum: str | None, tenderned_matched: bool, now: datetime
 ) -> RuleResult:
     if not tenderned_matched:
         return RuleResult("unknown", "no_tenderned_match")
     raw = sluitingsdatum.strip() if sluitingsdatum else None
     if not raw:
         return RuleResult("unknown", "missing")
-    closing = parse_date(raw)
+    closing = parse_sluitingsdatum(raw)
     if closing is None:
         return RuleResult("unknown", "missing", raw)  # unparseable: raw kept for review
     published = notice.publication_date or notice.issue_date
-    if is_placeholder_deadline(closing, published):
+    if is_placeholder_deadline(closing.day, published):
         return RuleResult("unknown", "placeholder_date", raw)
-    if closing < today:
+    if closing.is_closed(now):  # with a time: closed from that minute on, also today
         return RuleResult("fail", "closed", raw)
     if published is None:
         return RuleResult("unknown", "no_publication_date", raw)
-    if _working_days_after(published, closing) < MIN_WORKING_DAYS:
+    if _working_days_after(published, closing.day) < MIN_WORKING_DAYS:
         return RuleResult("fail", "too_short", raw)
     return RuleResult("pass", "ok", raw)
 
@@ -160,21 +165,29 @@ def apply_hard_filter(
     *,
     sluitingsdatum: str | None,
     tenderned_matched: bool,
-    today: date,
+    now: datetime,
 ) -> FilterResult:
-    """Apply the five hard rules. `sluitingsdatum` is the raw TenderNed value."""
+    """Apply the five hard rules. `sluitingsdatum` is the raw TenderNed value.
+
+    `now` is the moment of the check and must be timezone-aware.
+    """
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
     flags: list[str] = []
     rules = {
         "country": _country(notice),
         "cpv": _cpv(notice, flags),
-        "deadline": _deadline(notice, sluitingsdatum, tenderned_matched, today),
+        "deadline": _deadline(notice, sluitingsdatum, tenderned_matched, now),
         "value": _value(notice, flags),
         "notice_type": _notice_type(notice),
     }
     unknown_flags = [f"unknown:{name}" for name, rule in rules.items() if rule.outcome == "unknown"]
     if notice.main_nature and notice.main_nature != "services":
         flags.append("nature_supplies")  # BT-23: a flag, not a fail (DECISIONS.md)
-    if any(lot.place_country and lot.place_country.upper() not in NL_CODES for lot in notice.lots):
+    if any(
+        (lot.place_country_raw or lot.place_country) and lot.place_country != NL
+        for lot in notice.lots
+    ):
         flags.append("place_outside_nl")
     if notice.is_change:
         flags.append("change_notice")

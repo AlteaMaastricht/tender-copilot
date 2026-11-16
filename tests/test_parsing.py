@@ -1,16 +1,21 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 
 from ingest.parsing import (
+    AMSTERDAM,
+    Closing,
     _clean_text,
+    country_alpha2,
     is_placeholder_deadline,
     parse_amount,
     parse_currency,
     parse_date,
     parse_duration_months,
+    parse_sluitingsdatum,
     parse_tender_value,
+    start_of_day,
 )
 
 # --- parse_amount -------------------------------------------------------------
@@ -180,6 +185,90 @@ def test_parse_date_empty_and_invalid(raw: object) -> None:
     assert parse_date(raw) is None
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("2026-04-19T22:00:00Z", date(2026, 4, 20)),  # midnight in Amsterdam (summer time)
+        ("2026-04-19T21:59:59Z", date(2026, 4, 19)),
+        ("2026-01-19T23:00:00+00:00", date(2026, 1, 20)),  # winter time: one hour ahead
+        ("2026-04-20T01:00:00+08:00", date(2026, 4, 19)),
+        ("2026-04-20T00:30:00+02:00", date(2026, 4, 20)),
+        (datetime(2026, 4, 19, 22, 0, tzinfo=UTC), date(2026, 4, 20)),
+        ("20-04-2026 12:00", date(2026, 4, 20)),
+    ],
+)
+def test_parse_date_gives_the_amsterdam_date_of_a_value_with_an_offset(
+    raw: object, expected: date
+) -> None:
+    assert parse_date(raw) == expected
+
+
+# --- parse_sluitingsdatum -----------------------------------------------------
+
+NOON = datetime(2026, 4, 20, 12, 0, tzinfo=AMSTERDAM)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "2026-04-20T12:00:00",
+        "2026-04-20T12:00:00+02:00",
+        "2026-04-20T10:00:00Z",
+        "2026-04-20T10:00:00.000+00:00",
+        "2026-04-20 12:00:00",
+        "20-04-2026 12:00",
+        "20-04-2026 12:00:00",
+        "20/04/2026 12:00",
+        "  2026-04-20T12:00:00  ",
+    ],
+)
+def test_sluitingsdatum_with_a_time_is_one_moment_in_amsterdam(raw: str) -> None:
+    closing = parse_sluitingsdatum(raw)
+    assert closing == Closing(NOON, True)
+    assert closing.moment.utcoffset() == timedelta(hours=2) and closing.day == date(2026, 4, 20)
+
+
+@pytest.mark.parametrize("raw", ["2026-04-20", "20-04-2026", "20/04/2026"])
+def test_sluitingsdatum_without_a_time_is_the_start_of_that_day(raw: str) -> None:
+    assert parse_sluitingsdatum(raw) == Closing(start_of_day(date(2026, 4, 20)), False)
+
+
+def test_sluitingsdatum_in_utc_can_fall_on_the_next_amsterdam_day() -> None:
+    closing = parse_sluitingsdatum("2026-04-19T22:00:00Z")
+    assert closing is not None and closing.day == date(2026, 4, 20)
+    assert closing.moment == datetime(2026, 4, 19, 22, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "raw", [None, "", "onbekend", "not a date", "31-02-2026", "1990-01-01", "04-20-2026", 20260420]
+)
+def test_sluitingsdatum_empty_and_invalid(raw: object) -> None:
+    assert parse_sluitingsdatum(raw) is None
+
+
+def test_sluitingsdatum_keeps_the_placeholder_date_for_the_hard_filter() -> None:
+    closing = parse_sluitingsdatum("2099-12-31")
+    assert closing is not None and is_placeholder_deadline(closing.day, date(2026, 3, 2))
+
+
+def test_closing_is_closed() -> None:
+    timed = parse_sluitingsdatum("2026-04-20T12:00:00")
+    assert timed is not None
+    assert not timed.is_closed(NOON - timedelta(minutes=1))
+    assert timed.is_closed(NOON) and timed.is_closed(NOON + timedelta(minutes=1))
+    # The same moments given in another zone.
+    tokyo = timezone(timedelta(hours=9))
+    assert timed.is_closed(datetime(2026, 4, 20, 19, 0, tzinfo=tokyo))
+    assert not timed.is_closed(datetime(2026, 4, 20, 18, 59, tzinfo=tokyo))
+
+    day_only = parse_sluitingsdatum("2026-04-20")
+    assert day_only is not None
+    assert not day_only.is_closed(datetime(2026, 4, 20, 23, 59, tzinfo=AMSTERDAM))
+    assert day_only.is_closed(datetime(2026, 4, 21, 0, 0, tzinfo=AMSTERDAM))
+    with pytest.raises(ValueError, match="timezone-aware"):
+        timed.is_closed(datetime(2026, 4, 20, 13, 0))
+
+
 # --- _clean_text --------------------------------------------------------------
 
 
@@ -215,3 +304,28 @@ def test_clean_text(raw: object, expected: str | None) -> None:
 )
 def test_is_placeholder_deadline(closing: date, published: date | None, expected: bool) -> None:
     assert is_placeholder_deadline(closing, published) is expected
+
+
+# --- country_alpha2 -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("NLD", "NL"), ("nld", "NL"), (" NLD ", "NL"), ("NL", "NL"), ("nl", "NL"),
+     ("BEL", "BE"), ("DEU", "DE"), ("GRC", "GR"), ("GBR", "GB"), ("BES", "BQ")],
+)  # fmt: skip
+def test_country_alpha2(raw: str, expected: str) -> None:
+    assert country_alpha2(raw) == expected
+
+
+@pytest.mark.parametrize("raw", [None, "", "onbekend", "XKX", "Nederland", "N1", "NLDX", 528])
+def test_country_alpha2_unknown_gives_none(raw: object) -> None:
+    assert country_alpha2(raw) is None
+
+
+def test_only_the_dutch_code_maps_to_nl() -> None:
+    from ingest.parsing import _ALPHA3_TO_ALPHA2
+
+    assert [a3 for a3, a2 in _ALPHA3_TO_ALPHA2.items() if a2 == "NL"] == ["NLD"]
+    assert len(set(_ALPHA3_TO_ALPHA2.values())) == len(_ALPHA3_TO_ALPHA2)  # no code used twice
+    assert all(len(a3) == 3 and len(a2) == 2 for a3, a2 in _ALPHA3_TO_ALPHA2.items())

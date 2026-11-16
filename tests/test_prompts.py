@@ -552,3 +552,21 @@ def test_no_string_in_code_reads_like_an_instruction_to_a_model():
     for path in code_files():
         for text in strings(path, docstrings=False):
             assert not instruction.search(text), (path.name, text[:80])
+
+
+def test_memo_reason_prompt_explains_every_reason_code_the_rules_can_give():
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    rules = (root / "pipeline" / "memo.py").read_text()
+    codes = set(
+        re.findall(
+            r'"((?:knockout|fit|documents|no_knockouts|match|duplicate|awaiting|lot)_[a-z_0-9]+)"',
+            rules,
+        )
+    )
+    assert "lot_specific_knockout" in codes and len(codes) >= 12
+    prompt = (root / "prompts" / "memo_reason_v1.md").read_text()
+    missing = sorted(code for code in codes if f"`{code}`" not in prompt)
+    assert missing == [], missing

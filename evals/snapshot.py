@@ -17,12 +17,12 @@ import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from evals.metrics import AMSTERDAM, ExtractionFacts, LotFacts
-from ingest.parsing import is_placeholder_deadline, parse_date
+from evals.metrics import ExtractionFacts, LotFacts
+from ingest.parsing import is_placeholder_deadline, parse_sluitingsdatum
 from ingest.ted import TedNotice, parse_notice
 from pipeline.citations import PageText
 
@@ -256,21 +256,14 @@ def as_of_date(notice: TedNotice) -> date:
 
 
 def deadline_truth(raw: str | None, published: date | None) -> tuple[datetime | None, bool]:
-    """TenderNed `sluitingsDatum` as (moment, has a time). None for missing or placeholder."""
-    text = raw.strip() if raw else ""
-    day = parse_date(text) if text else None
-    if day is None or is_placeholder_deadline(day, published):
+    """TenderNed `sluitingsDatum` as (moment, has a time). None for missing or placeholder.
+
+    Parsed by the same function as the hard filter, so both read the value in Amsterdam time.
+    """
+    closing = parse_sluitingsdatum(raw)
+    if closing is None or is_placeholder_deadline(closing.day, published):
         return None, False
-    if len(text) > 10:
-        try:
-            moment = datetime.fromisoformat(text)
-        except ValueError:
-            moment = None
-        if moment is not None:
-            if moment.tzinfo is None:
-                moment = moment.replace(tzinfo=AMSTERDAM)
-            return moment, True
-    return datetime.combine(day, time(0), AMSTERDAM), False
+    return closing.moment, closing.has_time
 
 
 def ground_truth(tender: SnapshotTender) -> ExtractionFacts:

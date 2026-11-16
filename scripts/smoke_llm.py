@@ -92,7 +92,7 @@ def print_record(log: MemoryCallLog) -> None:
     fields = [
         "model", "prompt_name", "prompt_version", "input_tokens", "output_tokens",
         "cached_tokens", "cost_usd", "latency_ms", "status", "stop_reason",
-        "validation_retries", "network_retries", "error", "payload_path",
+        "validation_retries", "network_retries", "backoff_ms", "error", "payload_path",
     ]  # fmt: skip
     print("\nllm_calls record:")
     for name in fields:

@@ -30,6 +30,7 @@ LLM_CALLS_COLUMNS = {
     "run_id", "eval_run_id", "tender_id", "stage", "provider", "model", "prompt_name",
     "prompt_version", "step_index", "input_tokens", "output_tokens", "cached_tokens", "cost_usd",
     "latency_ms", "tool_calls", "stop_reason", "validation_retries", "error", "payload_path",
+    "network_retries", "backoff_ms", "status",
 }  # fmt: skip
 DIRTY = "Contact: Jan de Vries, jan@voorbeeld.nl, 06-12345678."
 
@@ -50,9 +51,9 @@ def screen(gateway, model=HAIKU, redactor=None, text="Dataplatform voor een geme
 # --- records ---------------------------------------------------------------------
 
 
-def test_record_has_every_llm_calls_column_plus_the_two_proposed():
+def test_record_has_every_llm_calls_column():
     fields = set(LlmCallRecord.__dataclass_fields__)
-    assert fields == LLM_CALLS_COLUMNS | {"status", "network_retries", "created_at"}
+    assert fields == LLM_CALLS_COLUMNS | {"created_at"}
     assert not {"api_key", "headers", "system", "messages", "prompt"} & fields
 
 
@@ -69,7 +70,57 @@ def test_one_record_per_call_with_the_fields_filled(tmp_path):
     assert record.latency_ms == 250
     assert (record.status, record.stop_reason, record.error) == ("ok", "end", None)
     assert (record.validation_retries, record.network_retries) == (0, 0)
+    assert record.backoff_ms == 0
     assert record.tool_calls == [] and record.payload_path is None
+
+
+class SleepingClock:
+    """A clock that a fake `sleep` moves forward, as real waiting would."""
+
+    def __init__(self) -> None:
+        self.now = 100.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class SlowProvider(FakeProvider):
+    """Every send, failed or not, takes `seconds` on the clock."""
+
+    def __init__(self, clock: SleepingClock, seconds: float, *script) -> None:
+        super().__init__(*script)
+        self._clock, self._seconds = clock, seconds
+
+    def send(self, request):
+        self._clock.now += self._seconds
+        return super().send(request)
+
+
+def test_latency_times_only_the_sends_and_the_backoff_wait_is_logged_apart(tmp_path):
+    clock = SleepingClock()
+    provider = SlowProvider(clock, 1.0, http_error(429, retry_after=30), reply())
+    gateway, log = make_gateway(tmp_path, provider, clock=clock, sleep=clock.sleep)
+    screen(gateway)
+    [record] = log.records
+    assert record.network_retries == 1
+    assert record.latency_ms == 2000  # two sends of one second each; was 32000 with the wait
+    assert record.backoff_ms == 30_000
+    assert clock.now == 132.0  # the wait did happen
+
+
+def test_backoff_is_summed_over_retries_and_logged_when_the_call_fails(tmp_path):
+    clock = SleepingClock()
+    provider = SlowProvider(clock, 0.5, *[http_error(503)] * 4)
+    gateway, log = make_gateway(tmp_path, provider, clock=clock, sleep=clock.sleep)
+    with pytest.raises(ProviderError):
+        screen(gateway)
+    [record] = log.records
+    assert (record.status, record.network_retries) == ("provider_error", 3)
+    assert record.latency_ms == 2000  # four sends of half a second
+    assert record.backoff_ms == 7000  # 1 + 2 + 4 seconds, jitter at its maximum in tests
 
 
 def test_tokens_and_cost_are_summed_over_a_validation_retry(tmp_path):

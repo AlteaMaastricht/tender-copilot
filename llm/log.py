@@ -33,7 +33,7 @@ class LlmCallRecord:
     model: str
     prompt_name: str
     prompt_version: str
-    status: Status  # proposed addition to llm_calls
+    status: Status
     eval_run_id: int | None = None
     tender_id: int | None = None
     step_index: int = 0
@@ -41,11 +41,12 @@ class LlmCallRecord:
     output_tokens: int = 0
     cached_tokens: int = 0  # the part of input_tokens read from a cache
     cost_usd: Decimal = Decimal(0)
-    latency_ms: int = 0
+    latency_ms: int = 0  # time spent in the provider calls, over every network attempt
     tool_calls: list[dict[str, Any]] = field(default_factory=list)  # names and arguments
     stop_reason: str | None = None
     validation_retries: int = 0
-    network_retries: int = 0  # proposed addition to llm_calls
+    network_retries: int = 0
+    backoff_ms: int = 0  # time waited before network retries; not included in latency_ms
     error: str | None = None
     payload_path: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

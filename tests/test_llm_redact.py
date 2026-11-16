@@ -6,7 +6,7 @@ import pytest
 
 from llm.prompts import PromptRef, UntrustedText
 from llm.providers.base import Message, ToolCall, ToolResult, ToolSpec
-from llm.redact import Redactor
+from llm.redact import Redactor, looks_like_person
 from pipeline.schemas import ScreeningOutput
 from tests.fakes import CONTEXT, HAIKU, FakeProvider, make_gateway, reply
 
@@ -36,10 +36,38 @@ def test_emails_are_replaced(address):
         "+31 6 12345678",
         "+31612345678",
         "0031 20 1234567",
+        "06 1234 5678",
+        "0570-12 34 56",
+        "0570 123 456",
+        "(0570) 123456",
+        "+31 (0)6 12345678",
+        "+31 20 123 45 67",
     ],
 )
 def test_phone_numbers_are_replaced(number):
     assert PLAIN.redact(f"Bel {number} tijdens kantooruren.") == "Bel [PHONE] tijdens kantooruren."
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Score: 0 25 50 75 100 punten",  # a scoring scale
+        "Schaal 0 100 200 300 punten",
+        "tabel: 0 1 2 3 4 5 6 7 8 9 10",
+        "Punten: 00 10 20 30 40 50",
+        "Kolommen 05 10 15 20 25 procent",  # a two-digit area code is only ever 06
+        "Weging 010 2 3 4 5 6 7 8 punten",  # single digits after the first group
+        "IBAN NL91 ABNA 0417 1643 00",
+        "IBAN: NL91ABNA 0417 1643 00.",
+    ],
+)
+def test_spaced_numbers_that_are_not_grouped_like_a_phone_number_are_left_alone(text):
+    assert PLAIN.redact(text) == text
+
+
+def test_a_phone_number_next_to_a_scale_is_still_replaced():
+    text = "Score 0 25 50 75 100; bel 06 12 34 56 78 of 020-123 45 67."
+    assert PLAIN.redact(text) == "Score 0 25 50 75 100; bel [PHONE] of [PHONE]."
 
 
 def test_two_phone_numbers_side_by_side():
@@ -106,6 +134,60 @@ def test_empty_name_list_still_redacts_emails_and_phones():
     text = "Jan de Vries, jan@voorbeeld.nl, 06-12345678"
     assert PLAIN.redact(text) == "Jan de Vries, [EMAIL], [PHONE]"
     assert Redactor(["", "  ", "Bo"]).redact(text) == "Jan de Vries, [EMAIL], [PHONE]"
+
+
+# --- contact names that are not persons ------------------------------------------
+
+SENTENCE = (
+    "De afdeling inkoop van de gemeente Voorbeeldstad beoordeelt de inschrijvingen; "
+    "het team aanbestedingen beantwoordt vragen over de inkoop."
+)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Inkoop",
+        "Afdeling Inkoop",
+        "Team Aanbestedingen",
+        "Gemeente Voorbeeldstad",
+        "Inkoopbureau Midden-Nederland",
+        "Servicedesk",
+        "Voorbeeld Advies B.V.",
+        "Jansen",  # one word, no title: not assumed to be a person
+        "Contactpunt 2",
+        "t.a.v. inkoop@voorbeeld.example",
+        "",
+    ],
+)
+def test_names_that_do_not_look_like_a_person(name):
+    assert not looks_like_person(name)
+    assert Redactor([name]).redact(SENTENCE) == SENTENCE
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["Jan de Vries", "J. de Vries", "dhr. Jansen", "mevrouw S. van der Berg", "Anne-Marie Smit"],
+)
+def test_names_that_look_like_a_person(name):
+    assert looks_like_person(name)
+
+
+def test_department_and_buyer_names_in_the_contact_list_do_not_remove_tender_text():
+    redactor = Redactor(["Inkoop", "Gemeente Voorbeeldstad", "Team Aanbestedingen", "Jan de Vries"])
+    assert redactor.redact(SENTENCE) == SENTENCE
+    assert redactor.redact("Vragen aan Jan de Vries, afdeling Inkoop.") == (
+        "Vragen aan [NAME], afdeling Inkoop."
+    )
+
+
+def test_a_contact_name_equal_to_an_organisation_name_is_skipped():
+    text = "Opdrachtgever is Voorbeeld Staete; contactpersoon is Jan de Vries."
+    names = ["Voorbeeld Staete", "Jan de Vries"]
+    # Shaped like a person's name, so only the organisation list can keep it readable.
+    assert Redactor(names).redact(text).startswith("Opdrachtgever is [NAME];")
+    redactor = Redactor(names, organisations=["  voorbeeld   STAETE "])
+    assert redactor.redact(text) == "Opdrachtgever is Voorbeeld Staete; contactpersoon is [NAME]."
 
 
 def test_repr_does_not_show_the_names():

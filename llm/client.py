@@ -2,8 +2,9 @@
 
 One call does, in order: load the prompt file, wrap untrusted text as data, redact, send
 (with network retries), check the stop reason, validate against the Pydantic schema (one
-retry), price, log, return. The gateway never executes a tool and has no write path other
-than its own call log: tool calls are handed back to the caller.
+retry), clear every citation's `verified` flag, price, log, return. The gateway never
+executes a tool and has no write path other than its own call log: tool calls are handed
+back to the caller.
 """
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ from llm.providers.base import (
     Usage,
 )
 from llm.redact import Redactor
+from llm.verified import reset_verified
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -141,7 +143,8 @@ class Step[T: BaseModel]:
 class _Tally:
     usage: Usage = Usage()
     cost: Decimal = Decimal(0)
-    latency_ms: int = 0
+    latency_ms: int = 0  # time inside provider.send, over every attempt
+    backoff_ms: int = 0  # time waited between attempts; never part of latency_ms
     network_retries: int = 0
     validation_retries: int = 0
     stop_reason: str | None = None
@@ -329,7 +332,8 @@ class Gateway:
                 if response.tool_calls or schema is None:
                     return self._step(None, response, assistant, tally)
                 try:
-                    output = schema.model_validate_json(_json_text(response.text))
+                    # A `verified` flag belongs to code: whatever the model wrote is dropped.
+                    output = reset_verified(schema.model_validate_json(_json_text(response.text)))
                 except ValidationError as exc:
                     errors.append(_validation_errors(exc))
                     if tally.validation_retries >= VALIDATION_RETRIES:
@@ -362,7 +366,11 @@ class Gateway:
     def _send(
         self, provider: Provider, request: ProviderRequest, tally: _Tally
     ) -> ProviderResponse:
-        """Send with network retries. Separate from, and not counted as, the validation retry."""
+        """Send with network retries. Separate from, and not counted as, the validation retry.
+
+        Only the sends are timed. The wait before a retry goes to `backoff_ms`, so latency
+        measures the provider and not how long a rate limit told us to wait.
+        """
         for attempt in range(MAX_ATTEMPTS):
             started = self._clock()
             try:
@@ -370,15 +378,17 @@ class Gateway:
             except ProviderError as exc:
                 if not exc.retryable or attempt == MAX_ATTEMPTS - 1:
                     raise
-                tally.network_retries += 1
-                if exc.retry_after is not None:
-                    delay = min(max(exc.retry_after, 0.0), RETRY_AFTER_CAP_SECONDS)
-                else:
-                    ceiling = min(BACKOFF_BASE_SECONDS * 2**attempt, BACKOFF_CAP_SECONDS)
-                    delay = ceiling * (0.5 + self._jitter() / 2)
-                self._sleep(delay)
+                error = exc
             finally:
                 tally.latency_ms += round((self._clock() - started) * 1000)
+            tally.network_retries += 1
+            if error.retry_after is not None:
+                delay = min(max(error.retry_after, 0.0), RETRY_AFTER_CAP_SECONDS)
+            else:
+                ceiling = min(BACKOFF_BASE_SECONDS * 2**attempt, BACKOFF_CAP_SECONDS)
+                delay = ceiling * (0.5 + self._jitter() / 2)
+            tally.backoff_ms += round(delay * 1000)
+            self._sleep(delay)
         raise AssertionError("unreachable")
 
     # --- helpers -------------------------------------------------------------------
@@ -468,6 +478,7 @@ class Gateway:
                 cached_tokens=tally.usage.cache_read_tokens,
                 cost_usd=tally.cost,
                 latency_ms=tally.latency_ms,
+                backoff_ms=tally.backoff_ms,
                 tool_calls=[_redacted_call(c, redactor) for c in calls],
                 stop_reason=tally.stop_reason,
                 validation_retries=tally.validation_retries,

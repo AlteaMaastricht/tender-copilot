@@ -332,3 +332,11 @@ def test_the_gateway_has_no_write_path():
         assert not forbidden & imported_modules(path), path
     # The gateway core does not even know the provider SDKs or how to run a tool.
     assert not {"anthropic", "mistralai", "agent"} & imported_modules(REPO / "llm" / "client.py")
+
+
+def test_no_module_in_llm_imports_from_pipeline():
+    # The gateway is the lower layer: pipeline code calls it, never the other way round.
+    files = sorted((REPO / "llm").rglob("*.py"))
+    assert len(files) >= 8 and REPO / "llm" / "verified.py" in files
+    for path in files:
+        assert not {"pipeline", "agent", "evals", "ingest"} & imported_modules(path), path

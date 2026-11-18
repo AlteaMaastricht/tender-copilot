@@ -13,7 +13,7 @@ An LLM agent for an invented Dutch IT/data consultancy (see `docs/COMPANY.md`). 
 
 Users can also chat with any tender ("What are the award criteria and their weights?").
 
-**Target:** about 4 weeks of focused work (2-3 weeks with AI-assisted coding). Apply to the role after week 2, with the repo public and a working demo.
+**Target:** about 4 weeks of focused work (2-3 weeks with AI-assisted coding).
 
 **Working rule:** AI coding tools may write most of the code. The agent loop, the eval labels and the design decisions must be mine, and I must be able to defend every one of them.
 
@@ -30,7 +30,7 @@ Company KB ─────┘   (daily job)   (tenders, docs,      (tools)   └
 - Stage 1: deterministic CPV-code filter plus a small, cheap model screens every tender.
 - Stage 2: a stronger model does deep analysis only on the shortlist.
 
-This is the "right level of sophistication at the right cost" the job asks for, backed by measured numbers.
+This is the "right level of sophistication at the right cost", backed by measured numbers.
 
 ### Agent tools
 
@@ -97,7 +97,7 @@ This is the "right level of sophistication at the right cost" the job asks for, 
 7. HubSpot: free CRM and a private app token. Create the deal (deadline, value, fit score, memo link) only after approval.
 8. Logging table: every LLM call with model, prompt version, tokens, cost, latency, tools called.
 
-**Done when:** the daily run produces a ranked inbox and correct memos for 3 tenders checked by hand. **Apply to the role now.**
+**Done when:** the daily run produces a ranked inbox and correct memos for 3 tenders checked by hand.
 
 ## 6. Phase 3: Evals and model comparison (week 3)
 
@@ -141,7 +141,6 @@ Key trick: the agent extracts from the document text and is graded against the X
    - International transfers: sending text to US model providers; reference the providers' data-processing terms and EU options.
    - AI Act: decision support with a human making the bid decision; not an Annex III high-risk category. Add a transparency notice in the UI; note the AI-literacy duty (Art. 4) for staff using it. Verify the current text and deadlines (the Digital Omnibus changed them).
    - Licences: TED and TenderNed reuse terms; each model's licence or terms.
-4. Update the CV: this project first, rewrite the profile line, add only tools actually used.
 
 ## 8. Week-by-week summary
 
@@ -149,9 +148,9 @@ Key trick: the agent extracts from the document text and is graded against the X
 |---|---|
 | 0 (3-4 days) | Procurement basics, repo, 50 notices in the DB, invented company KB |
 | 1 | Ingestion, chunking, hybrid search, frozen snapshot, first hit@5 |
-| 2 | Agent, extraction, requirement matching, memo, UI, HubSpot; apply |
+| 2 | Agent, extraction, requirement matching, memo, UI, HubSpot |
 | 3 | Full eval set, 3-model comparison, one measured improvement |
-| 4 | AWS deployment, README with compliance section, demo video, CV update |
+| 4 | AWS deployment, README with compliance section, demo video |
 
 ## 9. Things only I do
 
@@ -162,9 +161,9 @@ Key trick: the agent extracts from the document text and is graded against the X
 - Keep API keys out of chats and the repo (`.env` only; name the Anthropic key `APP_ANTHROPIC_API_KEY` so Claude Code does not bill the API instead of the subscription)
 - Rebuild the agent loop from memory once
 
-## 10. Interview checklist
+## 10. Design questions
 
-I must be able to explain:
+The design must be able to answer:
 - Why two stages, and what it saves in money
 - How tender documents are chunked, and why not by fixed tokens
 - Why hybrid search beats pure vector search for "Article 4.2" style queries

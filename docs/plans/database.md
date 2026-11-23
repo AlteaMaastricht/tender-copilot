@@ -72,7 +72,7 @@ Decisions taken in this plan without asking:
 
 ## 3. Build steps
 
-Ten steps. B0–B3 first; B4–B6 in any order after them; B7–B9 last.
+Eleven steps (B0–B10). B0–B3 first; B4–B6 in any order after them; B7–B10 last.
 
 ### B0. Package, settings, connections, test database
 
@@ -206,7 +206,8 @@ def cost_today(conn, *, now: datetime | None = None) -> Decimal
   6. `is_cancelled` true: set it and `status = 'cancelled'` (any prior status). It is never set back to false.
   7. `eforms_gt`: the notice deadline (BT-131, BT-1311), lot values, durations, framework maximum, from `TedNotice` (ARCHITECTURE 3 and 6). `raw_notice`: the TED search hit JSON.
   Returns `inserted`, `updated` or `unchanged`.
-- `unmatched_tenders(published_after)`: `tenderned_id is null`, not cancelled, `published_at >= published_after`; returns parsed `TedNotice`s (read the XML file).
+- `unmatched_tenders(published_after)`: `tenderned_id is null`, not cancelled, `published_at >= published_after`; returns `(tender_id, TedNotice)` pairs (notice parsed from the XML file).
+- `attach_tenderned(tender_id, match)`: one transaction: sets the TenderNed fields as in step 5 of `upsert_tender`, inserts `match.contacts`, and when the status is past `shortlisted` (`docs_unavailable`, `memo_ready`, and so on) resets it to `shortlisted` with reason `tenderned_matched`. `new`, `filtered_out` and `screened_out` keep their status.
 - `active_tenders(today)`: status in (`docs_ready`, `docs_unavailable`, `extracted`, `matched`, `memo_ready`, `failed`), `documents_access = 'tenderned'`, not cancelled, `deadline_at` null or `>= start_of_day(today)`.
 - `known_document_ids(tender_id)`: `tenderned_document_id` values of its `documents`.
 - `reset_to_shortlisted(tender_id, reason)`: `status = 'shortlisted'`, `attempts = 0`, `failed_step = null`, `error = 'reanalysis:' || reason`, unless cancelled. Current assessments and the memo stay current until replaced (DB7).
@@ -235,7 +236,7 @@ def cost_today(conn, *, now: datetime | None = None) -> Decimal
 - `add(tender_id, record, pages) -> int`: one transaction. `parent_key` (the archive's SHA-256) is resolved to `parent_document_id` within the same tender; an unknown parent raises. `INSERT ... ON CONFLICT (tender_id, sha256) DO NOTHING RETURNING id`; on conflict return the existing ID and add no pages. Pages inserted with `(document_id, page_no)` unique. `is_current` is inserted false; `recompute_current` sets it. `page_count`, `text_chars` computed from `pages` (not trusted from the record).
 - `recompute_current(tender_id)`: one statement with a window function: per `(tender_id, version_group)`, rank by `published_at desc nulls last, download_id desc nulls last, id desc`; set `is_current = (rank = 1)`. Archive members: their group already contains the archive's group as prefix (documents.md decision), so they rank among themselves. Runs inside one transaction so the partial unique index is never violated mid-way (set all false first, then the winners true).
 - `set_access(tender_id, access)`.
-- `docs_view(tender_id) -> DbDocs` (used by `TenderStore.docs`): a frozen dataclass satisfying pipeline.md P0 `DocsView`; documents ordered by `(published_at, id)`; `pages` loaded lazily per document (a property that queries `document_pages` once and caches), so a tender with 40 annexes does not load every sheet for a memo.
+- `docs_view(tender_id) -> DbDocs` (used by `TenderStore.docs`): a frozen dataclass satisfying pipeline.md P0 `DocsView` (`published_at` given as an ISO date string, as `DocView` expects); documents ordered by `(published_at, id)`; `pages` loaded lazily per document (a property that queries `document_pages` once and caches), so a tender with 40 annexes does not load every sheet for a memo.
 
 **Tests** (`db` marker plus contract suite against the in-memory sink):
 

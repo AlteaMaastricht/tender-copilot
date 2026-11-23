@@ -83,7 +83,7 @@ Decisions taken in this plan without asking (they follow from documents already 
 
 ## 3. Build steps
 
-Fourteen steps. Each is one session. Run them in order: later steps import earlier ones.
+Fifteen steps (P0–P14). Each is one session. Run them in order: later steps import earlier ones.
 
 ### P0. Shared inputs and the step environment
 
@@ -734,7 +734,8 @@ def answer_question(question: str, earlier: Sequence[ChatTurn], *, backend: Tool
 
 ```python
 Status = Literal["new", "filtered_out", "screened_out", "shortlisted", "docs_ready",
-                 "docs_unavailable", "extracted", "matched", "memo_ready", "failed"]
+                 "docs_unavailable", "extracted", "matched", "memo_ready", "failed",
+                 "cancelled"]                # cancelled: documents.md DD7; never returned by the store
 StepName = Literal["ingest", "filter", "screen", "fetch", "index", "extract", "match", "memo"]
 
 @dataclass(frozen=True, slots=True)
@@ -744,8 +745,9 @@ class TenderRow:
     notice: TedNotice                       # parsed from the stored XML
     tenderned_id: str | None
     tenderned_detail: Mapping[str, Any] | None
-    sluitingsdatum: str | None              # raw TenderNed value
+    sluitingsdatum: str | None              # raw TenderNed value (the rectification's when present)
     documents_access: str
+    filter_result: Mapping[str, Any] | None # FilterResult.to_json() of the last filter run
     status: Status
     failed_step: StepName | None
     attempts: int
@@ -829,7 +831,7 @@ def step_screen(tender: TenderRow, store: TenderStore, gateway: Gateway, config:
 - A screening `SchemaValidationError` → `failed`, `failed_step "screen"`, `attempts 1`, error `"SchemaValidationError"`; the next run retries and succeeds → `shortlisted`, attempts 0. Three failures → stays `failed`, not retried a fourth time.
 - A planted contact name and email in the fake store's contact rows and in the notice description: not in `sent_text()`.
 - Every call in the log has the same `run_id` and the right `tender_id`.
-- `redactor_for` is the only reference to `contact_rows` outside `jobs/store.py` (a test reads the source files under `pipeline/`, `agent/`, `jobs/` and counts).
+- `redactor_for` is the only caller of `contact_rows` (a test reads the source files under `pipeline/`, `agent/`, `jobs/`, `rag/`, `ingest/` and counts `.contact_rows(` calls; the method definitions in `jobs/store.py` and `db/tender_store.py` are not calls).
 - A cancelled tender in the store is never filtered, screened or counted.
 
 **Done when.** Tests pass.
@@ -855,7 +857,7 @@ def main(argv: Sequence[str] | None = None) -> int
 | From status | Step | Call | Status after |
 |---|---|---|---|
 | `shortlisted` | 4 fetch | `fetcher.fetch(tender, env)` with `env.model = config.stage1_model` | `docs_ready` or `docs_unavailable` |
-| `docs_ready` (no chunks yet) | 5 index | `indexer.index(tender.id)` | `docs_ready` (index step recorded by the store, e.g. `chunks` exist) |
+| `docs_ready` | 5 index | `indexer.index(tender.id)`, always called: it is idempotent and does nothing for documents already indexed (search.md S6) | `docs_ready` |
 | `docs_ready` | 6 extract | `extract(store.docs(id), env)`; save stage `extraction`, `needs_review=needs_review(out)`, prompt version `extract_map_v1+extract_reduce_v1` | `extracted` |
 | `extracted` | 7 match | `match_all(extraction, backend=backends(id), env)`; save stage `matching`, prompt `match_v1` | `matched` |
 | `matched` or `docs_unavailable` | 8 memo | `build_memo(MemoInputs(...), kb=kb, env)`; `save_memo` with the assessment IDs | `memo_ready` |

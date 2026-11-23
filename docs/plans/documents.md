@@ -260,6 +260,15 @@ class ContactRecord:             # one `contacts` row; personal data
     purge_after: date
 
 @dataclass(frozen=True, slots=True)
+class TenderNedMatch:            # the TenderNed side of a tender, also used for a late match
+    tenderned_id: str
+    tenderned_detail: Mapping[str, Any]                 # contact keys removed
+    tenderned_rectification: Mapping[str, Any] | None   # DD2; contact keys removed
+    sluitingsdatum: str | None   # effective raw value
+    documents_access: Literal["tenderned", "other_platform", "login_required", "none"]
+    contacts: tuple[ContactRecord, ...]                 # from the TenderNed detail
+
+@dataclass(frozen=True, slots=True)
 class IngestedTender:            # what the store upserts (database.md)
     notice: TedNotice
     notice_xml: bytes            # contact blocks removed
@@ -298,7 +307,8 @@ class IngestStore(Protocol):
     def remember_publications(self, refs: Iterable[PublicationRef]) -> None   # ted_number -> id cache
     def publication_for(self, ted_number: str) -> str | None
     def upsert_tender(self, tender: IngestedTender) -> UpsertOutcome          # inserted, updated, unchanged
-    def unmatched_tenders(self, published_after: date) -> list[TedNotice]
+    def unmatched_tenders(self, published_after: date) -> list[tuple[int, TedNotice]]
+    def attach_tenderned(self, tender_id: int, match: TenderNedMatch) -> None  # late match (step 8)
     def active_tenders(self, today: date) -> list[ActiveTender]               # for the DD11 refresh
     def known_document_ids(self, tender_id: int) -> set[str]
     def reset_to_shortlisted(self, tender_id: int, reason: str) -> None
@@ -314,7 +324,7 @@ class IngestStore(Protocol):
 5. `documents_access`: see the rules below. It needs the document list count; list it (one request) only for matched tenders.
 6. `is_cancelled`: D8.
 7. `upsert_tender(...)`. The store applies 2.2: key `procedure_id`; a later `notice_version` updates the row and appends the old `notice_id` to `superseded_notice_ids`; an older or equal version for a known procedure changes nothing.
-8. Re-match: for `unmatched_tenders(today - 30 days)`, try `publication_for` again; a new match updates the row (`tenderned_id`, detail, deadline). Status `filtered_out` because of `no_tenderned_match` goes back to `new`, so the hard filter runs again with the deadline.
+8. Re-match: for `unmatched_tenders(today - 30 days)`, try `publication_for` again. A new match builds a `TenderNedMatch` (`tenderned_id`, stripped detail and rectification, effective `sluitingsdatum`, `documents_access`, `contacts`) as in steps 4–5 and calls `attach_tenderned`. A missing match is not a filter fail (the deadline rule is `unknown`, 2.3), so an unmatched tender may already be screened or have a `docs_unavailable` memo. The store therefore resets a tender past `shortlisted` to `shortlisted`: its documents are fetched, and pipeline.md P14's deadline re-check (PD11) now sees the real closing date, including `too_short`.
 9. Refresh (DD11): for each `active_tenders(today)`, list documents; `reanalysis_needed(...)` → `reset_to_shortlisted(id, "new_document" or "deadline_changed")`. Cancelled tenders are not active.
 10. `purge_contacts(today)`.
 
@@ -337,7 +347,7 @@ Requests per run: 1 TED search page or two, one XML per hit, about 14 list pages
 
 - `split_contacts` on a detail with `contactpersoon: {naam, email, telefoon}` and `opdrachtgeverNaam`: contact block removed and returned, organisation kept; nested lists handled; `contact_keys(clean) == []`.
 - Matching: a TED notice `642990-2026` and a TenderNed ref with `pbNummerTed` in the D0 form → matched; an unknown number → `no match`, `documents_access "none"`, `tenderned_id None`.
-- Late TenderNed: the ref appears in the list two runs later → re-match sets `tenderned_id`, and a tender `filtered_out` for `no_tenderned_match` returns to `new`.
+- Late TenderNed: the ref appears in the list two runs later → `attach_tenderned` sets `tenderned_id`, the deadline and `documents_access`. A tender that was `memo_ready` with a notice-only memo goes back to `shortlisted`. A tender still `new` stays `new`, and its hard filter now reads the real closing date.
 - 31 days after publication: no more re-match attempts.
 - Rectification: detail with `publicatieIDLaatsteRectificatie` → second detail fetched; `effective_sluitingsdatum` returns the rectification's date; a rectification without `sluitingsDatum` falls back to the original.
 - `documents_access`: the five cases above, plus a Mercell `documents_url` on a matched tender with an empty list → `other_platform`.
@@ -571,9 +581,8 @@ class Rule:
     formats: tuple[str, ...] = ()   # only for these file formats, when given
 
 RULES: tuple[Rule, ...]
-TAG_PREFIX = {"notice": "AANK", "guideline": "LEIDRAAD", "requirements": "PvE",
-              "contract": "OVK", "qa": "NvI", "pricing": "BIJL", "form": "BIJL",
-              "annex": "BIJL", "other": "BIJL"}           # used by pipeline.md P0 document_tags
+# Tags (AANK, LEIDRAAD, PvE, OVK, NvI-n, BIJL-n) are owned by pipeline.md P0 `document_tags`,
+# built first; this module only sets `doc_type` and never defines tags of its own.
 CLASSIFY_FIRST_PAGE_CHARS = 3_000
 
 def classify_by_rule(name: str, category: str | None, file_format: str) -> str | None

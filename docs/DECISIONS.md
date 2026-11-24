@@ -19,7 +19,7 @@ Never record credentials here. Keep evidence (emails, screenshots, terms pages) 
 | S3 | Scope is the Netherlands only, with Dutch and English documents. No German retrieval evals. | Decided | 13 Nov 2026 | Replaces the earlier NL + BE + DE plan. Update `COMPANY.md` sections 4 and 5. |
 | S4 | AWS managed services are cut. Deployment is one VM with docker compose and cron. | Decided | 13 Nov 2026 | An AWS account is still needed for the deployment story. Keep a billing alarm. |
 | S5 | Kept: three-provider comparison, LLM-judge memo eval, per-tender chat. | Decided | 13 Nov 2026 | Chat has no write tools. |
-| S6 | Week-1 checkpoint: if the TenderNed fetcher has not downloaded documents for 20 test tenders by Friday 20 November, switch v1 to a manual snapshot. | Decided | 13 Nov 2026 | Record as a README limitation if triggered. |
+| S6 | Week-1 checkpoint: if the TenderNed fetcher has not downloaded documents for 20 test tenders by Friday 20 November, switch v1 to a manual snapshot. | Triggered | 23 Nov 2026 | Checkpoint missed: no documents downloaded by 20 Nov (status check 23 Nov). v1 uses a manual snapshot; see "Plan decisions (23 Nov 2026)". Record as a README limitation. |
 
 ---
 
@@ -38,7 +38,7 @@ Never record credentials here. Keep evidence (emails, screenshots, terms pages) 
 | # | Question | Status | Decision / answer | Evidence |
 |---|---|---|---|---|
 | Q4 | Models for Stage 1 and Stage 2, and the third provider? | Proposed | Stage 1 (screening): Claude Haiku. Stage 2 (extraction, matching, memo): Claude Sonnet. Comparison: OpenAI and Mistral (EU-hosted). | Mistral strengthens the transfers paragraph and is named in the job description. Model IDs and prices to be confirmed in Phase 3. |
-| Q5 | Embeddings: local BGE-M3 or hosted API? | Proposed | Local BGE-M3. | Free, multilingual (Dutch and English), no extra data transfer. Dimension 1024 matches the schema. |
+| Q5 | Embeddings: local BGE-M3 or hosted API? | Decided (23 Nov 2026, SD2) | Local BGE-M3. | Free, multilingual (Dutch and English), no extra data transfer. Dimension 1024 matches the schema. |
 | Q6 | Scanned PDFs: flag only, or OCR? | Proposed | Flag only (`extraction_status = scanned`). OCR is a stretch goal. | Saves time in v1. |
 | Q7 | Tables: `pymupdf` text, or table extraction? | Open | To decide after testing on the probe PDFs, especially the award-criteria weights. | Test on the Inschrijvingsleidraad from 406922 and the EF16 notices. |
 
@@ -362,3 +362,30 @@ Decided by Arthur on 16 Nov 2026, after the read-only code review of that day.
 | R9 | Lot-specific knock-out (interim, Q8 stays open) | Decided | A `not_met` knock-out with a non-empty `applies_to_lots` gives `needs_review` with reason `lot_specific_knockout`, whatever its mitigation: it never gives `no_bid` or the `bid_conditional` cap for the whole tender. A `not_met` on all lots elsewhere still gives `no_bid`. To be replaced when Q8 (one memo per tender or per lot) is decided. `memo_reason_v1` explains the code (edited in place, see R11). |
 | R10 | Country code | Decided | `TedNotice.country`, `TedBuyer.country` and `TedLot.place_country` hold ISO 3166-1 alpha-2 (`NL`), the form of `tenders.country char(2)`. The value as written in the notice (alpha-3, `NLD`) is kept in `country_raw` and `place_country_raw`. The hard filter compares the alpha-2 code with `NL` and records the raw value in `filter_result`. A code that is not in the conversion table is stored as null with its raw value kept. The country rule is then `unknown` with reason `unrecognised_code`, never a fail: the tender continues with the flag `unknown:country`. |
 | R11 | Prompt versions | Decided | `prompts/memo_reason_v1.md` was edited in place on 16 Nov 2026 to explain `lot_specific_knockout`. This is allowed only because no memo has been generated with v1 and no prompt has been run against a model. From the first real run onward, any change to a prompt file gets a new version (`_v2`, ...); a file that has been used is never edited. |
+
+## Plan decisions (23 Nov 2026)
+
+Decided by Arthur on 23 Nov 2026, accepting every recommendation in section 2 of `docs/plans/documents.md` and `docs/plans/search.md`. Details and trade-offs are in those plans.
+
+| # | Topic | Status | Decision |
+|---|---|---|---|
+| S6-fallback | Manual snapshot | Decided | The S6 checkpoint was missed, so v1 uses a manual snapshot of the 20 test tenders: Arthur downloads the documents by hand into `data/raw/manual/<publication_id>/`, and `scripts/freeze_snapshot.py --from-manual data/raw/manual` builds `data/snapshot/` from them (documents.md section 4 and D9). Both folders are git-ignored. The automated fetcher (documents.md D0–D10) is built after the Sia application on 27 Nov, before the project deadline of 11 Dec. Until then live tenders get `docs_unavailable` memos. README states this as a limitation. |
+| F13 | Review finding 13 | Decided | Finding 13 means cancellations are not detected. Handled by DD7. |
+| DD1 | PDF library | Decided | PyMuPDF (AGPL-3.0). The repo is MIT; the README names the licence and notes that a client deployment would use a permissive library such as pypdfium2 or pypdf instead. |
+| DD2 | Rectifications | Decided | Keep the original TenderNed detail; add jsonb column `tenders.tenderned_rectification`, read through `effective_sluitingsdatum()`. |
+| DD3 | Download method | Decided | Per file through `links.download.href`. `documenten/zip` only in the D0 probe, to record what it returns. |
+| DD4 | Skip known files | Decided | Skip a download when its `documentId` is already stored. SHA-256 stays the only de-duplication key. |
+| DD5 | Classification rules | Decided | The wider 9-rule table from documents.md D7, replacing the 4 rules of ARCHITECTURE 2.10. |
+| DD6 | Model classifier | Decided | Add `prompts/doc_classify_v1.md`, a `DocClassification` schema and `doc_type_source` value `default`. |
+| DD7 | Cancellations | Decided | New terminal status `cancelled`, and a `notice_type` filter fail with reason `cancelled`. |
+| DD8 | Snapshot tenders without a TED notice | Decided | Replace each with the next draw (seed 20261113). The recorded selection changes; the change is logged in the snapshot section. |
+| DD9 | Contact retention | Decided | Closing date + 183 days, or publication date + 365 days when there is no closing date; purged daily. |
+| DD10 | `.xls`, `.odt`, `.rtf` | Decided | Marked `unsupported` in v1; no LibreOffice conversion. |
+| DD11 | Document-list refresh | Decided | Re-check the document list of active analysed tenders on every daily run. |
+| SD1 | Hybrid ranking | Decided | One Python ranker (cosine plus BM25 with Snowball stemming, fused with reciprocal rank fusion) for evals and production. The Postgres `fts` columns stay (database.md) but are unused. `ARCHITECTURE.md` 2.1 and 9 each get a line, proposed as a diff. |
+| SD2 | Embeddings (Q5) | Decided | Local BGE-M3. |
+| SD3 | Optional extra | Decided | The embedding stack is an optional `embed` extra, kept out of CI and the app image. |
+| SD4 | Model comparison | Decided | Compare BGE-M3 with multilingual-e5-large once, after the retrieval labels exist. |
+| SD5 | Chunk sizes | Decided | Target 1,500 characters, maximum 2,000, minimum 200; 200 characters overlap for fixed windows only. Tune from the retrieval eval. |
+
+Dependencies listed in section 1 of each plan are not approved by this entry; each is approved separately, after checking its upload date in `uv.lock`.

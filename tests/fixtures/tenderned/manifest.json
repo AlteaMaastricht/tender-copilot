@@ -1,0 +1,45 @@
+{
+  "requests": 5,
+  "files": [
+    {
+      "role": "detail",
+      "path": "/publicaties/409819",
+      "status": 200,
+      "file": "detail_409819.json",
+      "sha256": "e061df966cba64d9f6e0862d4be79e04e6ad08677af2ad1725d3070134e9acf5",
+      "removed_key_paths": []
+    },
+    {
+      "role": "rectification",
+      "path": "/publicaties/413241",
+      "status": 200,
+      "file": "rectification_413241.json",
+      "sha256": "01f1c798dadf71338138e971dd7b1df52c05f608792133f094ec08d7eca91037",
+      "removed_key_paths": []
+    },
+    {
+      "role": "detail",
+      "path": "/publicaties/408259",
+      "status": 200,
+      "file": "detail_408259.json",
+      "sha256": "1df2382363628ccc4c950c2c47c4404129a404d8c658ebf670511b9c8ec79fe4",
+      "removed_key_paths": []
+    },
+    {
+      "role": "rectification",
+      "path": "/publicaties/418437",
+      "status": 200,
+      "file": "rectification_418437.json",
+      "sha256": "cb5358aaf1797a01eeb96870104aae81a3c215b12e61422f4539a87676cfa5b7",
+      "removed_key_paths": []
+    },
+    {
+      "role": "detail",
+      "path": "/publicaties/406922",
+      "status": 200,
+      "file": "detail_406922.json",
+      "sha256": "60e615fb911b423786c0e8f6ac2d0b150c609a4415837977906a8b22f5a1fdbe",
+      "removed_key_paths": []
+    }
+  ]
+}

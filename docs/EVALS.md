@@ -68,6 +68,8 @@ data/snapshot/
 - **Ground truth** is derived in code from `notice.xml` and `tenderned.json` (`evals/snapshot.py`, `ground_truth`). A document-reading step receives only the documents and their page text: no notice fields, no closing date, no contact names.
 - **As-of date.** The snapshot tenders closed months ago, so the hard filter is given the day after the tender's publication date as "today": the start of that day in Amsterdam time, since the filter takes a moment. An edge-case label can set its own `as_of`.
 - `contacts.json` and `tenderned.json` are optional. Without `tenderned.json` the tender has no TenderNed match.
+- `tenderned_rectification.json` is optional: the publication named by `publicatieIDLaatsteRectificatie`, contact keys removed. When it exists and has a `sluitingsDatum`, that value is the closing date (`effective_sluitingsdatum`, DD2); the original `tenderned.json` is kept as it was.
+- In a manual snapshot (`freeze_snapshot.py --from-manual`) documents have `published_at = null` and `language = null`, and `is_current` is true for every document.
 - Nothing writes this folder yet. The freeze script is a separate task; `evals.snapshot.build_manifest` gives it the manifest.
 
 ## 4. Metrics: exact formulas

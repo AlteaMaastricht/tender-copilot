@@ -13,17 +13,21 @@ from pathlib import Path
 
 import pytest
 
+from ingest.http import HttpClient, HttpError, HttpResponse
 from ingest.ted import (
     TedBuyer,
     TedContact,
     TedLot,
     TedNotice,
     TedParseError,
+    fetch_notice_xml,
     find_original,
     group_by_procedure,
+    normalise_ted_number,
     parse_contacts,
     parse_notice,
     parse_notice_file,
+    strip_contacts,
 )
 from llm.redact import Redactor
 
@@ -537,3 +541,85 @@ def test_all_lot_deadlines_placeholder() -> None:
     assert all(lot.tender_deadline is None for lot in n.lots)
     assert (n.deadline, n.deadline_status) == (None, "placeholder")
     assert "placeholder:deadline" in n.warnings
+
+
+# --- live fetch and contact stripping (D2, minimal) ---------------------------------------------
+
+CANARY_CONTACT = (
+    "<cac:Contact><cbc:Name>Kanariepiet</cbc:Name>"
+    "<cbc:ElectronicMail>kanariepiet@voorbeeld.example</cbc:ElectronicMail></cac:Contact>"
+)
+
+
+def test_strip_contacts_removes_the_blocks_and_keeps_the_notice() -> None:
+    text, injected = _with_contacts()
+    injected = injected.replace("</efac:Company>", CANARY_CONTACT + "</efac:Company>", 1)
+    stripped = strip_contacts(injected.encode("utf-8"))
+    assert b"cac:Contact" not in stripped and b"Kanariepiet" not in stripped
+    assert parse_notice(stripped) == parse_notice(injected.encode("utf-8"))
+    assert parse_notice(stripped) == _parse_text(text)
+    assert parse_contacts(stripped) == ()
+
+
+def test_strip_contacts_is_a_no_op_on_a_clean_fixture() -> None:
+    clean = (FIXTURES / "643202-2026.xml").read_bytes()
+    assert strip_contacts(clean) == clean
+
+
+def test_strip_contacts_refuses_a_block_it_cannot_remove() -> None:
+    _, injected = _with_contacts()
+    odd = injected.replace("<cac:Contact>", '<cac:Contact id="1">', 1)
+    with pytest.raises(TedParseError) as info:
+        strip_contacts(odd.encode("utf-8"))
+    assert "Kanariepiet" not in str(info.value) and "voorbeeld" not in str(info.value)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("642990-2026", "642990-2026"),
+        ("00642990-2026", "642990-2026"),
+        ("60877-2026", "60877-2026"),
+        (" 2130-2026 ", "2130-2026"),
+        ("2026/S 190-642990", "642990-2026"),
+        ("642990-26", None),
+        ("abc", None),
+        ("", None),
+        ("../../x-2026", None),
+        (None, None),
+        (642990, None),
+    ],
+)
+def test_normalise_ted_number(value: object, expected: str | None) -> None:
+    assert normalise_ted_number(value) == expected
+
+
+class _Transport:
+    def __init__(self, response: HttpResponse) -> None:
+        self.response = response
+        self.urls: list[str] = []
+
+    def __call__(self, req, timeout, max_bytes):
+        self.urls.append(req.full_url)
+        return self.response
+
+
+def _http(response: HttpResponse) -> tuple[HttpClient, _Transport]:
+    transport = _Transport(response)
+    return HttpClient(transport=transport, sleep=lambda _: None), transport
+
+
+def test_fetch_notice_xml_requests_the_normalised_number() -> None:
+    body = (FIXTURES / "642990-2026.xml").read_bytes()
+    http, transport = _http(HttpResponse(200, "application/xml; charset=utf-8", {}, body))
+    assert fetch_notice_xml(http, "00642990-2026") == body
+    assert transport.urls == ["https://ted.europa.eu/en/notice/642990-2026/xml"]
+
+
+def test_fetch_notice_xml_rejects_html_and_bad_numbers() -> None:
+    http, transport = _http(HttpResponse(200, "text/html", {}, b"<html>"))
+    with pytest.raises(HttpError):
+        fetch_notice_xml(http, "642990-2026")
+    with pytest.raises(ValueError):
+        fetch_notice_xml(http, "../etc/passwd")
+    assert len(transport.urls) == 1  # the bad number made no request

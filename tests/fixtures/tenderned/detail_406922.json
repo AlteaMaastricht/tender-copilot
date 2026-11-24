@@ -1,0 +1,96 @@
+{
+  "aanbestedingNaam": "SaaS-oplossing voor capaciteitsplanning (“Monitor Plancapaciteit”)",
+  "aankondigingCode": {
+    "code": "AGO",
+    "omschrijving": "Aankondiging gegunde opdracht"
+  },
+  "aanvangOpdrachtDatum": "2026-01-01",
+  "afgerondeAanbesteding": true,
+  "cpvCodes": [
+    {
+      "code": "72000000",
+      "isHoofdOpdracht": true,
+      "omschrijving": "IT-diensten: adviezen, softwareontwikkeling, internet en ondersteuning"
+    },
+    {
+      "code": "72222300",
+      "isHoofdOpdracht": true,
+      "omschrijving": "Diensten in verband met informatietechnologie"
+    },
+    {
+      "code": "48482000",
+      "isHoofdOpdracht": false,
+      "omschrijving": "Business-intelligence software"
+    },
+    {
+      "code": "72260000",
+      "isHoofdOpdracht": false,
+      "omschrijving": "Diensten in verband met software"
+    }
+  ],
+  "digitaalInschrijvenCode": {
+    "code": "TEN",
+    "omschrijving": "TenderNed"
+  },
+  "formType": "result",
+  "isGegund": true,
+  "isGeimporteerd": false,
+  "isVroegtijdigBeeindigd": null,
+  "juridischKaderCode": {
+    "code": "NAW",
+    "omschrijving": "Aanbestedingswet 2012"
+  },
+  "kenmerk": 537183,
+  "links": {
+    "addToTenders": {
+      "href": "https://www.tenderned.nl/ondernemersplatform/aankondigingen/406922?addToTenders=true",
+      "title": "addToTenders"
+    },
+    "keepInformed": {
+      "href": "https://www.tenderned.nl/aanbestedende-dienst/aankondigingen/406922?keepInformed=true",
+      "title": "keepInformed"
+    },
+    "pdf": {
+      "href": "/papi/tenderned-rs-tns/v2/publicaties/406922/pdf",
+      "title": "pdf"
+    },
+    "shareOnLinkedIn": {
+      "href": "https://www.linkedin.com/sharing/share-offsite/?url=https://www.tenderned.nl/aankondigingen/overzicht/406922",
+      "title": "shareOnLinkedIn"
+    }
+  },
+  "nationaalOfEuropeesCode": {
+    "code": "EU",
+    "omschrijving": "Europees"
+  },
+  "numberOfDaysBeforeAanmeldenInschrijven": -1,
+  "onlyGunningProcedure": false,
+  "opdrachtAardCode": {
+    "code": "OOP",
+    "omschrijving": "Overheidsopdracht"
+  },
+  "opdrachtBeschrijving": "Deze opdracht betreft de levering, implementatie, het beheer en de doorontwikkeling van een volledig SaaS-gebaseerde Monitor Plancapaciteit voor de provincies Noord-Holland en Flevoland. De Provincie Noord-Holland treedt op als penvoerder van deze aanbesteding, waarbij de Provincie Flevoland als deelnemer is aangesloten. Het platform ondersteunt het invoeren, valideren, ontsluiten en rapporteren van gegevens over woningbouwplannen, inclusief dashboards, kaartweergaven, koppelingen met landelijke en gemeentelijke databronnen en functionaliteiten voor samenwerking met ketenpartners. Het doel is een toekomstbestendige, veilige en gebruiksvriendelijke oplossing die aansluit op de Basisset 2.0 Landelijke Monitoring Voortgang Woningbouw en welke bijdraagt aan een betere regie op de woningbouwopgave. Voor een uitgebreidere beschrijving van de aard en omvang van de opdracht wordt verwezen naar de inschrijvingsleidraad. Zie inschrijvingsleidraad.",
+  "opdrachtgeverNaam": "Provincie Noord-Holland",
+  "pbNummerTed": "2130-2026",
+  "plaatsVanUitvoeringDienstenAndere": {
+    "code": "LND",
+    "omschrijving": "Overal in het desbetreffende land"
+  },
+  "procedureCode": {
+    "code": "OPE",
+    "omschrijving": "Openbaar"
+  },
+  "publicatieCode": "EF29",
+  "publicatieDatum": "2026-01-03T08:33:49.243943",
+  "publicatieId": 406922,
+  "referentieNummer": "TN-537183",
+  "sluitingsDatum": "2025-10-30T14:00:00",
+  "sluitingsDatumMarktconsultatie": "2025-10-30",
+  "trefwoord1": "\"SaaS-oplossing Softwareontwikkeling Dataplatform Monitoring Dashboards GIS Datakoppelingen Rapportages Woningbouw Ruimtelijke ordening\"",
+  "typeOpdrachtCode": {
+    "code": "D",
+    "omschrijving": "Diensten"
+  },
+  "typePublicatie": "Aankondiging gegunde opdracht - algemene richtlijn, standaardregeling",
+  "voltooiingOpdrachtDatum": "2029-12-31"
+}

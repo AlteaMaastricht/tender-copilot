@@ -1,0 +1,82 @@
+{
+  "aanbestedingNaam": "EA beveiligingsdiensten (personele beveiligingsdiensten en mobiele surveillancediensten, inclusief de meldkamerfunctie)",
+  "aankondigingCode": {
+    "code": "REC",
+    "omschrijving": "Rectificatie"
+  },
+  "aanvangOpdrachtDatum": "2026-08-01",
+  "afgerondeAanbesteding": true,
+  "cpvCodes": [
+    {
+      "code": "79710000",
+      "isHoofdOpdracht": true,
+      "omschrijving": "Beveiligingsdiensten"
+    }
+  ],
+  "digitaalInschrijvenCode": {
+    "code": "TEN",
+    "omschrijving": "TenderNed"
+  },
+  "formType": "competition",
+  "isGegund": true,
+  "isGeimporteerd": false,
+  "isVroegtijdigBeeindigd": null,
+  "juridischKaderCode": {
+    "code": "NAW",
+    "omschrijving": "Aanbestedingswet 2012"
+  },
+  "kenmerk": 568502,
+  "links": {
+    "addToTenders": {
+      "href": "https://www.tenderned.nl/ondernemersplatform/aankondigingen/413241?addToTenders=true",
+      "title": "addToTenders"
+    },
+    "keepInformed": {
+      "href": "https://www.tenderned.nl/aanbestedende-dienst/aankondigingen/413241?keepInformed=true",
+      "title": "keepInformed"
+    },
+    "pdf": {
+      "href": "/papi/tenderned-rs-tns/v2/publicaties/413241/pdf",
+      "title": "pdf"
+    },
+    "shareOnLinkedIn": {
+      "href": "https://www.linkedin.com/sharing/share-offsite/?url=https://www.tenderned.nl/aankondigingen/overzicht/413241",
+      "title": "shareOnLinkedIn"
+    }
+  },
+  "nationaalOfEuropeesCode": {
+    "code": "EU",
+    "omschrijving": "Europees"
+  },
+  "numberOfDaysBeforeAanmeldenInschrijven": -1,
+  "onlyGunningProcedure": false,
+  "opdrachtAardCode": {
+    "code": "OOP",
+    "omschrijving": "Overheidsopdracht"
+  },
+  "opdrachtBeschrijving": "Europese aanbesteding volgens de openbare procedure voor de levering van beveiligingsdiensten (personele beveiligingsdiensten en mobiele surveillancediensten, inclusief de meldkamerfunctie) Hogeschool Inholland gaat uit van een geraamde totale opdrachtwaarde (inclusief optiejaren) van € 6.600.000,- euro exclusief btw. De gemiddelde uitgaven over de afgelopen jaren zijn circa €700.000,-- exclusief btw per jaar.",
+  "opdrachtgeverNaam": "Hogeschool Inholland",
+  "pbNummerTed": "127725-2026",
+  "plaatsVanUitvoeringDienstenAndere": {
+    "code": "LND",
+    "omschrijving": "Overal in het desbetreffende land"
+  },
+  "procedureCode": {
+    "code": "OPE",
+    "omschrijving": "Openbaar"
+  },
+  "publicatieCode": "EF20",
+  "publicatieDatum": "2026-02-23T15:00:01.214451",
+  "publicatieIDLaatsteRectificatie": 413241,
+  "publicatieId": 413241,
+  "referentieNummer": "M.000744",
+  "sluitingsDatum": "2026-03-20T10:00:00",
+  "sluitingsDatumMarktconsultatie": "2026-03-20",
+  "typeOpdrachtCode": {
+    "code": "D",
+    "omschrijving": "Diensten"
+  },
+  "typePublicatie": "Aankondiging van een opdracht - algemene richtlijn, lichte regeling",
+  "urlDigitaalSysteem": "https://www.tenderned.nl/aankondigingen/overzicht/413241",
+  "voltooiingOpdrachtDatum": "2030-07-31"
+}

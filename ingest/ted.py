@@ -1,6 +1,7 @@
 """Parse saved TED eForms contract notices into typed records.
 
-Pure functions on XML bytes: no network calls, standard library only.
+Pure functions on XML bytes, standard library only. The one network function,
+`fetch_notice_xml`, goes through `ingest.http.HttpClient`, so tests never touch the network.
 
 Notes:
 - `TedNotice.deadline` is the notice's own deadline (BT-131 (confirm), else BT-1311 (confirm)). Per
@@ -24,6 +25,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal
 
+from ingest.http import HttpClient, HttpError
 from ingest.parsing import (
     AMSTERDAM,
     PLACEHOLDER_DEADLINE,
@@ -558,3 +560,57 @@ def find_original(change: TedNotice, notices: Iterable[TedNotice]) -> TedNotice 
         if candidate.notice_version == change.changed_notice_version:
             return candidate
     return candidates[0] if candidates else None
+
+
+# --- live fetch and contact stripping (D2, minimal) ------------------------------------------
+
+XML_URL = "https://ted.europa.eu/en/notice/{number}/xml"
+CONTACT_BLOCK_RE = re.compile(r"<cac:Contact>.*?</cac:Contact>", re.DOTALL)
+# If any of these is still present after stripping, the notice is refused instead of stored.
+LEFTOVER_MARKERS = ("ElectronicMail", "Telephone", "Telefax", "cac:Contact")
+_TED_NUMBER_FORMS = (
+    re.compile(r"(\d{1,10})-(\d{4})"),  # 642990-2026, 00642990-2026, 60877-2026
+    re.compile(r"(\d{4})/S \d{1,3}-(\d{1,10})"),  # 2026/S 190-642990
+)
+
+
+def normalise_ted_number(value: object) -> str | None:
+    """`00642990-2026` or `2026/S 190-642990` -> `642990-2026`. None for anything else."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if match := _TED_NUMBER_FORMS[0].fullmatch(text):
+        return f"{int(match.group(1))}-{match.group(2)}"
+    if match := _TED_NUMBER_FORMS[1].fullmatch(text):
+        return f"{int(match.group(2))}-{match.group(1)}"
+    return None
+
+
+def strip_contacts(xml: bytes) -> bytes:
+    """Remove every `<cac:Contact>` block (names, emails, phones: CLAUDE.md privacy rule).
+
+    Raises TedParseError when a contact marker remains (a tag with attributes, say) or when
+    the result no longer parses. Messages never contain notice text. Call `parse_contacts`
+    on the original bytes first: only the stripped bytes may be stored.
+    """
+    stripped = CONTACT_BLOCK_RE.sub("", xml.decode("utf-8"))
+    left = [marker for marker in LEFTOVER_MARKERS if marker in stripped]
+    if left:
+        raise TedParseError(f"contact markers remain after stripping: {', '.join(left)}")
+    out = stripped.encode("utf-8")
+    try:
+        ET.fromstring(out)
+    except ET.ParseError:
+        raise TedParseError("stripped notice does not parse") from None
+    return out
+
+
+def fetch_notice_xml(client: HttpClient, number: str) -> bytes:
+    """The notice XML for a TED publication number, as downloaded (contacts still inside)."""
+    normalised = normalise_ted_number(number)
+    if normalised is None:
+        raise ValueError("not a TED publication number")
+    response = client.get_bytes(XML_URL.format(number=normalised))
+    if "xml" not in response.content_type.lower():
+        raise HttpError(f"not an XML answer for notice {normalised}", response.status)
+    return response.body

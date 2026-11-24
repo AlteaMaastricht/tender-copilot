@@ -389,3 +389,23 @@ Decided by Arthur on 23 Nov 2026, accepting every recommendation in section 2 of
 | SD5 | Chunk sizes | Decided | Target 1,500 characters, maximum 2,000, minimum 200; 200 characters overlap for fixed windows only. Tune from the retrieval eval. |
 
 Dependencies listed in section 1 of each plan are not approved by this entry; each is approved separately, after checking its upload date in `uv.lock`.
+
+## Manual snapshot (24 Nov 2026)
+
+Decided by Arthur on 24 Nov 2026 (answers to section 1 of `docs/plans/manual_snapshot.md`).
+
+| # | Topic | Status | Decision |
+|---|---|---|---|
+| MQ1 | Which 20 tenders (deviation from DD8) | Decided | DD8 says to replace a tender without a TED notice by the next draw of its CPV group and month. That needs the selection script, which is not in the repo, so for the manual snapshot the selected rows are taken in order and each one without a TED notice is skipped. The first 20 selected rows in file order are all from June 2026 (8 × CPV 79, 7 × CPV 72, 5 × CPV 48), which is lopsided, so the order is round-robin instead: within each CPV group the rows go round the months January to June (file order inside a month), and the groups are interleaved in proportion to the selection (70 : 50 : 30). The first 20 of that order are 9 × CPV 79, 7 × CPV 72 and 4 × CPV 48, spread over all six months; the first 40 are 19, 13 and 8. Skipped IDs are recorded when the snapshot is frozen. Strict DD8 stays open (`NEXT.md` item 4). |
+| MQ2 | Details check | Decided | The details of the first 40 rows of that order are checked first; the check is extended only if fewer than 20 have a TED notice. |
+| MQ3 | ZIP files | Decided | Arthur unzips by hand and deletes the `.zip`. |
+| MQ4 | Dependencies | Decided | Approved and added with `uv add`: pymupdf 1.28.2 (6 Aug 2026), python-docx 1.2.0 (16 Jun 2025), openpyxl 3.1.5 (28 Jun 2024); lxml 6.1.3 (2 Sep 2026) and et-xmlfile 2.0.0 (25 Oct 2024) came in with them. `uv.lock` gains these five packages and nothing else changes. |
+| MQ5 | Doc changes | Decided | `EVALS.md` 3 names the optional `tenderned_rectification.json` and the manual-snapshot values; `data/.gitignore` lists `snapshot.tmp/`, `snapshot.prev/` and `snapshot_report.json`. |
+
+Probe of 24 Nov 2026 (`scripts/fetch_tenderned_fixtures.py`, 5 anonymous requests, details only; fixtures in `tests/fixtures/tenderned/`):
+
+- **Field names confirmed.** The publication detail has `publicatieId`, `pbNummerTed` (for example `60877-2026`, no zero padding), `sluitingsDatum` (for example `2026-03-20T10:00:00`, no offset) and, only when there is one, `publicatieIDLaatsteRectificatie`. All three publications had a `pbNummerTed`.
+- **A rectification is a separate publication** with its own ID and its own `pbNummerTed`: 409819 → 413241 (`127725-2026`) and 408259 → 418437 (`233524-2026`). The original's `pbNummerTed` is the TED notice the snapshot uses.
+- **The rectifications do not explain the two deadline mismatches** (`NEXT.md` item 1). For 409819 the spreadsheet says 2026-03-09, and the API gives 2026-03-20 in both the original and the rectification. For 408259 the spreadsheet says 2026-03-06, and the API gives 2026-04-28 in both. The cause stays unknown; the API value is the one used (13 Nov finding). DD2's column and `effective_sluitingsdatum` stay as decided, but neither rectification changed a closing date.
+- **The details hold no contact keys.** The contact guard removed nothing from any of the five responses, so contact names for the Redactor come from the TED notice only.
+- **406922 is an award notice** (`Aankondiging gegunde opdracht`), kept as a fixture for its shape only. The detail also has `isVroegtijdigBeeindigd` and `isGegund`, which D8 (cancellations) should check.

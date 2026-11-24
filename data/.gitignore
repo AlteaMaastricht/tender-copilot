@@ -6,3 +6,6 @@ llm_payloads/
 snapshot/
 # Memos written by eval runs (`--memo-dir`): they hold tender text.
 eval_memos/
+snapshot.tmp/
+snapshot.prev/
+snapshot_report.json

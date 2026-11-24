@@ -1,0 +1,82 @@
+{
+  "aanbestedingNaam": "Inhuur uitzendkrachten",
+  "aankondigingCode": {
+    "code": "REC",
+    "omschrijving": "Rectificatie"
+  },
+  "afgerondeAanbesteding": true,
+  "cpvCodes": [
+    {
+      "code": "79620000",
+      "isHoofdOpdracht": true,
+      "omschrijving": "Diensten voor de terbeschikkingstelling van personeel, met inbegrip van tijdelijk personeel"
+    }
+  ],
+  "digitaalInschrijvenCode": {
+    "code": "TEN",
+    "omschrijving": "TenderNed"
+  },
+  "formType": "competition",
+  "isGegund": true,
+  "isGeimporteerd": false,
+  "isVroegtijdigBeeindigd": null,
+  "juridischKaderCode": {
+    "code": "NAW",
+    "omschrijving": "Aanbestedingswet 2012"
+  },
+  "kenmerk": 564439,
+  "links": {
+    "addToTenders": {
+      "href": "https://www.tenderned.nl/ondernemersplatform/aankondigingen/418437?addToTenders=true",
+      "title": "addToTenders"
+    },
+    "keepInformed": {
+      "href": "https://www.tenderned.nl/aanbestedende-dienst/aankondigingen/418437?keepInformed=true",
+      "title": "keepInformed"
+    },
+    "pdf": {
+      "href": "/papi/tenderned-rs-tns/v2/publicaties/418437/pdf",
+      "title": "pdf"
+    },
+    "shareOnLinkedIn": {
+      "href": "https://www.linkedin.com/sharing/share-offsite/?url=https://www.tenderned.nl/aankondigingen/overzicht/418437",
+      "title": "shareOnLinkedIn"
+    }
+  },
+  "nationaalOfEuropeesCode": {
+    "code": "EU",
+    "omschrijving": "Europees"
+  },
+  "numberOfDaysBeforeAanmeldenInschrijven": -1,
+  "onlyGunningProcedure": false,
+  "opdrachtAardCode": {
+    "code": "RAA",
+    "omschrijving": "Raamovereenkomst"
+  },
+  "opdrachtBeschrijving": "De VRU wenst een Overeenkomst af te sluiten met een Opdrachtnemer die uitzendkrachten kan leveren voor de operationele en operationele/tactische functies. Dit kan door middel van:\n• Uitzendkrachten met een ‘uitzendovereenkomst met uitzendbeding’ (Fase A);\n• Gedetacheerden met een ‘arbeidsovereenkomst met het uitzendbureau’ (Fase B). € 1.000.000 exclusief BTW voor de gehele looptijd van de overeenkomst",
+  "opdrachtgeverNaam": "Veiligheidsregio Utrecht",
+  "pbNummerTed": "233524-2026",
+  "plaatsVanUitvoeringDienstenAndere": {
+    "code": "LND",
+    "omschrijving": "Overal in het desbetreffende land"
+  },
+  "procedureCode": {
+    "code": "OPE",
+    "omschrijving": "Openbaar"
+  },
+  "publicatieCode": "EF16",
+  "publicatieDatum": "2026-04-01T16:56:00.755669",
+  "publicatieIDLaatsteRectificatie": 418437,
+  "publicatieId": 418437,
+  "referentieNummer": "000009162",
+  "sluitingsDatum": "2026-04-28T12:00:00",
+  "sluitingsDatumMarktconsultatie": "2026-04-28",
+  "trefwoord1": "\"uitzendkrachten\"",
+  "trefwoord2": "\"arbeidskrachten\"",
+  "typeOpdrachtCode": {
+    "code": "D",
+    "omschrijving": "Diensten"
+  },
+  "typePublicatie": "Aankondiging van een opdracht - algemene richtlijn, standaardregeling",
+  "urlDigitaalSysteem": "https://www.tenderned.nl/aankondigingen/overzicht/418437"
+}

@@ -16,6 +16,9 @@ dependencies = [
     # Provider SDKs, imported only in llm/providers/. Newest releases before the lock cutoff.
     "anthropic==2.3.0",
     "mistralai==3.6.0",
+    "pymupdf==1.28.2",
+    "python-docx==1.2.0",
+    "openpyxl==3.1.5",
 ]
 
 [project.optional-dependencies]

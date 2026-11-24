@@ -268,14 +268,14 @@ def _key_words(key: object) -> tuple[str, list[str]]:
     return "".join(words), words
 
 
-def _is_contact_key(key: object, under_person: bool) -> bool:
+def is_contact_key(key: object, under_person: bool) -> bool:
     joined, words = _key_words(key)
     if any(part in joined for part in CONTACT_SUBSTRINGS) or CONTACT_WORDS & set(words):
         return True
     return under_person and bool(NAME_WORDS & set(words))
 
 
-def _is_person_key(key: object) -> bool:
+def is_person_key(key: object) -> bool:
     joined, _ = _key_words(key)
     return any(part in joined for part in PERSON_PARENTS)
 
@@ -283,9 +283,9 @@ def _is_person_key(key: object) -> bool:
 def contact_keys(value: Any, under_person: bool = False) -> list[str]:
     """Keys at any depth of a result that look like contact data."""
     if isinstance(value, dict):
-        found = [str(k) for k in value if _is_contact_key(k, under_person)]
+        found = [str(k) for k in value if is_contact_key(k, under_person)]
         for key, item in value.items():
-            found += contact_keys(item, under_person or _is_person_key(key))
+            found += contact_keys(item, under_person or is_person_key(key))
         return found
     if isinstance(value, list | tuple):
         return [key for item in value for key in contact_keys(item, under_person)]

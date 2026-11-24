@@ -16,10 +16,12 @@
       "Bash(uv remove:*)",
       "Bash(uv lock:*)",
       "Bash(uv sync:*)",
+      "Bash(uv run:*)",
       "Bash(curl:*)",
       "Bash(wget:*)",
-      "Bash(python scripts/:*)",
-      "Bash(.venv/bin/python scripts/:*)"
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(.venv/bin/python:*)"
     ],
     "deny": [
       "Bash(git commit:*)",

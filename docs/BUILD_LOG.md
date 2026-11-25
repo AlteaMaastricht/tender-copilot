@@ -24,3 +24,9 @@ One entry per plan step that passed review. Written by the /build supervisor.
 - Fixes: rerun idempotent through a per-folder `.download_ids.json` (DD4); `documentId` must match `[A-Za-z0-9_-]{1,64}`; damaged index stops the run; `name_taken` recorded; stricter `resolve_href`; non-JSON 200 in the details check stops the run; contact test can fail.
 - Open (low): the 24 Nov download has no index, so a rerun downloads everything again; the name length plus ID suffix can exceed 255 bytes (uncaught `OSError`); a `name_taken` file is downloaded again on each rerun; docstring vs. behaviour for 3xx/non-JSON lists; no paging check on the list; `resolve_href` misses percent-encoded `..`; the href prefix was not checked against live hrefs.
 - The 8 non-final folders were deleted by Arthur (25 Nov).
+
+### M5: classification rules (25 Nov 2026), PASS (DD5 amendment, then 1 fix round)
+- Files: `ingest/classify.py`, `tests/test_classify.py`.
+- Tests: 1454/1454; lint clean.
+- Escalated on 24 Nov: the D7 table mislabelled real names. Arthur approved the DD5 amendment on 25 Nov. Fix round 1: whitespace collapsed again after `_` becomes a space.
+- Open (labels the amended table gives as written): UEA files give `guideline` (`aanbestedingsdocument` before `uea`); "Aanbestedingsleidraad raamovereenkomst …" gives `contract`; some "… na NvI" files without a contract or pricing word stay `qa`; `verklaring` catches an auditor's statement; `gibit`, "Rectificatie", "Aanvullende mededelingen", "staat van ontleding …", "Inschrijvingsbiljet" and "Invulformat kwaliteit" have no fitting rule; substrings such as `contract` in `contractmanager`. Archive files must not be passed to `classify_by_rule` (M6).

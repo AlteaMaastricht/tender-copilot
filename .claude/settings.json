@@ -1,35 +1,21 @@
 {
   "permissions": {
+    "defaultMode": "acceptEdits",
     "allow": [
-      "Bash(make test)",
-      "Bash(make lint)",
-      "Bash(.venv/bin/pytest:*)",
-      "Bash(.venv/bin/ruff:*)",
-      "Bash(git --no-pager diff:*)",
-      "Bash(git --no-pager status:*)",
-      "Bash(git diff:*)",
-      "Bash(git status:*)",
-      "Bash(git log:*)"
-    ],
-    "ask": [
-      "Bash(uv add:*)",
-      "Bash(uv remove:*)",
-      "Bash(uv lock:*)",
-      "Bash(uv sync:*)",
-      "Bash(uv run:*)",
-      "Bash(curl:*)",
-      "Bash(wget:*)",
-      "Bash(python:*)",
-      "Bash(python3:*)",
-      "Bash(.venv/bin/python:*)"
+      "Bash",
+      "Edit",
+      "Write"
     ],
     "deny": [
-      "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(git reset:*)",
-      "Bash(git stash:*)",
       "Bash(git rebase:*)",
+      "Bash(git stash:*)",
+      "Bash(git clean:*)",
+      "Bash(git checkout -- :*)",
+      "Bash(git commit --amend:*)",
       "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
       "Read(./.env)",
       "Edit(./.env)",
       "Write(./.env)",

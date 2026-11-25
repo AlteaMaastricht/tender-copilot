@@ -15,10 +15,10 @@ For each step, in order:
 2. Build. Call the `builder` agent with a brief: the plan file, the step id, the exact approvals that apply to this step, and the findings to fix if this is a retry.
 3. Review. Call the `reviewer` agent with the plan file and step id. Do not pass it the builder's report.
 4. Act on the verdict.
-   - PASS: append the step to `docs/BUILD_LOG.md` (step, date, files, tests, open items) and go to the next step.
+   - PASS: append the step to `docs/BUILD_LOG.md` (step, date, files, tests, open items). Then commit the step: run `git --no-pager status --short`, stop at step 6 if `.env`, anything under `data/raw/`, `data/snapshot/` or `evals/datasets/` would be included, otherwise `git add` only the files in the builder's FILES list plus `docs/BUILD_LOG.md`, and run `git commit -m "<one-line message>"`: one line, imperative, no body, no trailers. Then go to the next step.
    - FIX: send the findings back to the builder (step 2). At most 2 fix rounds per step; after that, stop at step 6.
    - ESCALATE, or builder STATUS BLOCKED: stop at step 6.
-5. Never commit, push, add a dependency, make a network call, or answer an open decision yourself, even if an agent suggests it.
+5. Never push, never commit outside the PASS step, add a dependency, make a network call, or answer an open decision yourself, even if an agent suggests it.
 6. Stop and report to Arthur with: the steps finished (with test counts), the question or blocker in one or two sentences with your recommendation, and the exact reply he can give to continue (for example `/build docs/plans/manual_snapshot.md M2-M3 approve: ...`).
 
-When all steps pass, finish with: steps built, `make lint` and `make test` results, `git --no-pager status --short`, what is still open, and a suggested one-line commit message. Do not commit.
+When all steps pass, finish with: steps built, `make lint` and `make test` results, `git --no-pager status --short`, what is still open, and the list of commits made (git --no-pager log --oneline for this run). Do not push.

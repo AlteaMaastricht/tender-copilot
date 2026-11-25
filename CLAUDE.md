@@ -28,7 +28,7 @@ Module responsibilities are in `docs/ARCHITECTURE.md` section 2.1.
 - **Open decisions.** Section 8 of `docs/ARCHITECTURE.md` lists questions I still have to answer. Do not decide them yourself. Ask me first.
 - **Tests.** Every module gets tests. Use saved XML and PDF fixtures in `tests/fixtures/`, not live downloads.
 - **Dependencies.** Ask before adding one.
-- **Commits.** Small commits with clear messages. Commit only when I ask.
+- **Commits.** Small commits with one-line messages. Commit only when I ask, or when the /build supervisor commits a step the reviewer passed. Never push.
 
 ## Done means
 `make test` passes, `ruff check` is clean, and you have said in one sentence what was built and what is still open.

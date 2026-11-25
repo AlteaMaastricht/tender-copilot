@@ -302,6 +302,16 @@ def _is_link(info: zipfile.ZipInfo) -> bool:
     return stat.S_ISLNK(info.external_attr >> 16)
 
 
+def _unique_member(member: PurePosixPath, taken: set[str]) -> PurePosixPath:
+    """The member's path, or `name (2).ext` when another member differs from it only in case."""
+    candidate, number = member, 1
+    while candidate.as_posix().lower() in taken:
+        number += 1
+        candidate = member.with_name(f"{member.stem} ({number}){member.suffix}")
+    taken.add(candidate.as_posix().lower())
+    return candidate
+
+
 def unpack_zip(archive_path: Path, dest: Path) -> Unpacked:
     """Unpack one ZIP into `dest` (a new folder). Never raises for a bad archive.
 
@@ -315,6 +325,7 @@ def unpack_zip(archive_path: Path, dest: Path) -> Unpacked:
         with zipfile.ZipFile(archive_path) as archive:
             wanted: list[tuple[zipfile.ZipInfo, PurePosixPath]] = []
             seen: set[str] = set()
+            taken: set[str] = set()  # lower-case paths: macOS folds case when unpacking
             for info in archive.infolist():
                 member = _safe_member(info.filename)
                 if member is None:
@@ -329,6 +340,7 @@ def unpack_zip(archive_path: Path, dest: Path) -> Unpacked:
                     result.skipped += 1
                     continue
                 seen.add(member.as_posix())
+                member = _unique_member(member, taken)
                 wanted.append((info, member))
             if any(info.flag_bits & 0x1 for info, _ in wanted):
                 return _unsupported(dest, "encrypted", result)
@@ -388,6 +400,7 @@ class TenderDocuments:
     unsupported: list[dict[str, str]] = field(default_factory=list)
     skipped_entries: int = 0
     unsafe_members: int = 0
+    lock_files: list[str] = field(default_factory=list)  # Office lock files ("~$..."), skipped
 
 
 def _sha256(path: Path) -> str:
@@ -410,6 +423,9 @@ def read_documents(files: Sequence[tuple[str, Path]], work: Path) -> TenderDocum
     pending: list[tuple[str, Path]] = []  # top-level ZIP files
 
     def handle(relative: str, path: Path, level: int) -> None:
+        if PurePosixPath(relative).name.startswith("~$"):
+            out.lock_files.append(relative)
+            return
         digest = _sha256(path)
         if digest in seen:
             out.duplicates.append(relative)
@@ -657,6 +673,7 @@ def freeze(
             unsupported=docs.unsupported,
             skipped_entries=docs.skipped_entries,
             unsafe_zip_members=docs.unsafe_members,
+            office_lock_files_skipped=docs.lock_files,
         )
 
     report["requests"] = client.requests

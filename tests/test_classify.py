@@ -32,7 +32,8 @@ def test_each_rule_has_a_positive_name(name, category, fmt, expected):
 
 
 def test_all_nine_rules_are_covered():
-    assert sorted(r.order for r in RULES) == list(range(1, 10))
+    # Rules 5 and 8 each appear twice since DD5 amendment 2 (leidraad and UEA moved earlier).
+    assert {r.order for r in RULES} == set(range(1, 10))
 
 
 @pytest.mark.parametrize(
@@ -107,3 +108,28 @@ def test_no_match_gives_none(name):
 )
 def test_dd5_amendment(name, fmt, expected):
     assert classify_by_rule(name, None, fmt) == expected
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Bijlage 3 - Uniform Europees Aanbestedingsdocument UEA.pdf",
+        "uea_596894_20260618143529.pdf",
+    ],
+)
+def test_uea_is_a_form_before_the_guideline_rule(name):
+    assert classify_by_rule(name, None, "pdf") == "form"
+
+
+def test_uea_must_be_a_whole_word():
+    assert classify_by_rule("Dueau rapport.pdf", None, "pdf") is None
+
+
+def test_leidraad_is_checked_before_the_contract_rule():
+    assert classify_by_rule("Aanbestedingsleidraad raamovereenkomst", None, "pdf") == "guideline"
+    assert classify_by_rule("Concept raamovereenkomst", None, "pdf") == "contract"
+
+
+def test_uea_does_not_override_qa_or_contract():
+    assert classify_by_rule("Nota van inlichtingen UEA", None, "pdf") == "qa"
+    assert classify_by_rule("Overeenkomst UEA", None, "pdf") == "contract"

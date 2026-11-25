@@ -21,9 +21,11 @@ _EXTENSIONS = {
     ".zip": "zip",
 }
 _DOCUMENT_EXTENSIONS = frozenset(
-    {".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xlsm", ".xls", ".zip", ".odt", ".ods",
-     ".odp", ".rtf", ".txt", ".csv", ".xml", ".html", ".htm", ".msg", ".eml", ".jpg", ".jpeg",
-     ".png", ".tif", ".tiff", ".7z", ".rar"}
+    {
+        ".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xlsb", ".xlsm", ".xls", ".zip",
+        ".odt", ".ods", ".odp", ".rtf", ".txt", ".csv", ".xml", ".html", ".htm", ".msg",
+        ".eml", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".7z", ".rar",
+    }
 )  # fmt: skip
 _PDF_WINDOW = 1024  # a PDF header may follow a few junk bytes
 _SPACES = re.compile(r"\s+")
@@ -46,6 +48,8 @@ def _zip_kind(head: bytes) -> str:
     except (zipfile.BadZipFile, OSError, ValueError):
         # Only the start of the file: member names sit in the local headers.
         names = [m.decode("latin-1") for m in re.findall(rb"(?:word|ppt|xl)/[\w./-]*", head)]
+    if "xl/workbook.bin" in names:
+        return "other"  # binary workbook: a ZIP with an xl/ folder, but not XLSX
     for folder, kind in _OOXML_FOLDERS:
         if any(n.startswith(folder) for n in names):
             return kind
@@ -55,13 +59,16 @@ def _zip_kind(head: bytes) -> str:
 def file_format(name: str, head: bytes) -> str:
     """pdf, docx, doc, pptx, xlsx, zip or other: by magic bytes first, then by extension.
 
+    A binary workbook (xlsb) is `other`.
+
     A ZIP is told apart by its member folders, which needs the whole file when the central
     directory is past `head`; a truncated head falls back to the names in the local headers.
     OLE files count as `doc` only when the name ends in `.doc`.
     """
     extension = PurePath(name).suffix.lower()
     if head.startswith(b"PK\x03\x04"):
-        return _zip_kind(head)
+        kind = _zip_kind(head)
+        return "other" if kind == "xlsx" and extension == ".xlsb" else kind
     if head.startswith(b"\xd0\xcf\x11\xe0"):
         return "doc" if extension == ".doc" else "other"
     if b"%PDF" in head[:_PDF_WINDOW]:

@@ -70,3 +70,17 @@ def test_zip_holding_a_stored_pdf_is_zip():
 def test_normalise_name_keeps_dotted_numbers():
     assert normalise_name("Bijlage 2.1") != normalise_name("Bijlage 2.2")
     assert normalise_name("Bijlage 2.1.pdf") == "bijlage 2.1"
+
+
+def test_xlsb_is_other_not_xlsx(tmp_path):
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("xl/workbook.bin", b"x")
+    data = buffer.getvalue()
+    assert file_format("a.xlsb", data) == "other"
+    assert file_format("renamed.xlsx", data) == "other"  # by member names
+    assert file_format("a.xlsb", b"") == "other"  # extension fallback
+    assert normalise_name("Prijzen.xlsb") == "prijzen"

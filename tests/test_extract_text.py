@@ -165,3 +165,9 @@ def test_xlsx_without_extension_opens(tmp_path):
         result = extract_xlsx(path)
         assert result.status == "ok"
         assert [p.page_label for p in result.pages] == ["Prijzen", "Planning", "Intern (hidden)"]
+
+
+def test_xlsb_is_unsupported(tmp_path):
+    path = tmp_path / "a.xlsb"
+    path.write_bytes(b"PK")
+    assert extract(path, "other").status == "unsupported"

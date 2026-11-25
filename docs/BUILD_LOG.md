@@ -46,3 +46,11 @@ One entry per plan step that passed review. Written by the /build supervisor.
   - `.xlsb` is detected as xlsx and fails (M4);
   - the container schema line in EVALS.md needs Arthur's confirmation;
   - the freeze needs about 13 min of CPU.
+
+### M6 follow-up: DD5 amendment 2 (25 Nov 2026), PASS after 1 fix round
+- Files: `ingest/classify.py`, `ingest/documents.py`, `scripts/freeze_snapshot.py`, `tests/test_classify.py`, `tests/test_documents_format.py`, `tests/test_extract_text.py`, `tests/test_freeze_snapshot.py`.
+- Tests: 1503/1503; lint clean. No network calls.
+- Changes: UEA (`uea`, `uniform europees`) gives `form`, checked after requirements and before the other guideline names; leidraad variants checked before the contract rule; `.xlsb` gets `file_format` `other` and `unsupported` (report keeps `.xlsb`); `~$` lock files skipped in folders and ZIPs and reported as `office_lock_files_skipped`; ZIP members that differ only in case get a suffix.
+- Fix round 1: `xlsb` was a new format value outside the ARCHITECTURE.md list, now `other`; the UEA rule had been placed before contract, pricing and qa.
+- Regression check over the 402 real names: only 4 change type (1 leidraad, 3 UEA), all intended.
+- Open: no rules yet for GIBIT, "Rectificatie" and "Inschrijvingsbiljet"; a 404 TED notice or rectification is not cached or refetched; the 24 Nov download has no download index. A name like "Nota van inlichtingen aanbestedingsleidraad" would give `guideline` (follows from the approved order; no real name affected). The header comment in `ingest/classify.py` lines 22-24 is slightly out of date (low).

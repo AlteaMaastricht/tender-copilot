@@ -746,3 +746,51 @@ def test_the_cache_folder_is_git_ignored() -> None:
         check=False,
     )
     assert result.returncode == 0
+
+
+def test_xlsb_is_reported_as_unsupported_as_other(one) -> None:
+    folder, work = one
+    make_zip(folder / "Prijzen.xlsb", {"xl/workbook.bin": b"x"})
+    docs = read(folder, work)
+    assert [(r.file_format, r.extraction_status) for r in docs.rows] == [("other", "unsupported")]
+    assert docs.unsupported == [{"filename": "Prijzen.xlsb", "extension": ".xlsb"}]
+
+
+def test_office_lock_files_are_skipped_and_reported(one) -> None:
+    folder, work = one
+    (folder / "~$Bijlage.docx").write_bytes(b"lock")
+    (folder / "Programma van eisen.pdf").write_bytes(fixture("two_pages.pdf"))
+    make_zip(
+        folder / "stukken.zip",
+        {
+            "~$Prijzen.xlsx": b"lock",
+            "map/~$x.docx": b"lock",
+            "Bijlage.docx": fixture("sections.docx"),
+        },
+    )
+    docs = read(folder, work)
+    assert sorted(r.filename for r in docs.rows) == [
+        "Programma van eisen.pdf",
+        "stukken.zip/Bijlage.docx",
+    ]
+    assert all("~$" not in r.filename for r in docs.rows)
+    assert sorted(docs.lock_files) == [
+        "stukken.zip/map/~$x.docx",
+        "stukken.zip/~$Prijzen.xlsx",
+        "~$Bijlage.docx",
+    ]
+
+
+def test_zip_members_differing_only_in_case_do_not_overwrite_each_other(one) -> None:
+    folder, work = one
+    with zipfile.ZipFile(folder / "case.zip", "w") as archive:
+        archive.writestr("Bijlage.pdf", fixture("two_pages.pdf"))
+        archive.writestr("BIJLAGE.pdf", fixture("sections.docx"))
+    unpacked = fz.unpack_zip(folder / "case.zip", work / "case")
+    names = sorted(name for name, _ in unpacked.members)
+    assert names == ["BIJLAGE (2).pdf", "Bijlage.pdf"]
+    assert len({name.lower() for name in names}) == 2
+    assert {p.read_bytes() for _, p in unpacked.members} == {
+        fixture("two_pages.pdf"),
+        fixture("sections.docx"),
+    }

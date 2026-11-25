@@ -430,3 +430,17 @@ DD5 amendment (25 Nov 2026, decided by Arthur after the M5 review ran the rules 
 ZIP files (25 Nov 2026, decided by Arthur; replaces MQ3 and "ZIPs left packed"): the freeze script (M6), before classification, unpacks every ZIP, detected by content and not by extension, with the standard-library `zipfile` module into a subfolder named after the archive. The files inside are then extracted and classified like any other. Limits per archive: path traversal and absolute paths rejected, no nested ZIPs beyond one level, at most 500 files and 500 MB unpacked. An archive over a limit, or unreadable, is reported and marked `unsupported`, and never crashes the run. The archive itself is kept as a container record, not a document.
 
 Snapshot list (25 Nov 2026, decided by Arthur): the freeze script takes its tenders from `data/snapshot_ids.txt` (committed, the final 20 above), not from whichever folders exist. A listed ID without a folder is reported; a folder not on the list is ignored and reported.
+
+ZIP container record (25 Nov 2026, confirmed by Arthur): an unpacked archive is recorded in a `containers` list in `documents.json`, as built in M6, not as a document row.
+
+DD5 amendment 2 (25 Nov 2026, decided by Arthur after the M6 offline check over the 20 folders):
+
+| Change | Reason |
+|---|---|
+| `uea` and `uniform europees` are checked before the guideline rule (type `form`) | UEA files gave `guideline` because `aanbestedingsdocument` matched first. |
+| `leidraad` (all variants) is checked before the contract rule | "Aanbestedingsleidraad raamovereenkomst …" gave `contract`. "Concept raamovereenkomst" stays `contract`. |
+| `.xlsb` files are marked `unsupported`, not read as XLSX | They were detected as xlsx and failed. |
+| Office lock files (`~$…`) are skipped, in folders and inside ZIPs, and reported | They are not documents. |
+| ZIP members whose names differ only in letter case get a suffix | On macOS the second member overwrote the first. |
+
+Still open: rules for `gibit`, "Rectificatie" and "Inschrijvingsbiljet"; refetch of a 404 TED notice or rectification; the 24 Nov download has no download index.

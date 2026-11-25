@@ -20,10 +20,22 @@ class Rule:
 
 
 # Tuple order is the match order. `order` is the DD5 rule number; the DD5 amendment
-# (25 Nov 2026) checks rules 6 and 7 before rule 3 (qa).
+# (25 Nov 2026) checks rules 6 and 7 before rule 3 (qa); amendment 2 puts the UEA and the
+# leidraad part of rule 5 before rule 6.
 RULES: tuple[Rule, ...] = (
     Rule(1, "notice", category="ANK"),
     Rule(2, "notice", names=(r"re:\befe? ?\d{1,2}\b",), prefixes=("aankondiging",)),
+    # DD5 amendment 2 (25 Nov 2026): every leidraad is checked before the contract rule.
+    Rule(
+        5,
+        "guideline",
+        names=(
+            "inschrijvingsleidraad",
+            "selectieleidraad",
+            "aanbestedingsleidraad",
+            "leidraad",
+        ),
+    ),
     Rule(
         6,
         "contract",
@@ -69,14 +81,13 @@ RULES: tuple[Rule, ...] = (
             "bestek",
         ),
     ),
+    # The UEA (a whole word) is checked before the other guideline names, so that
+    # "aanbestedingsdocument" in its title does not win.
+    Rule(8, "form", names=(r"re:\buea\b", "uniform europees")),
     Rule(
         5,
         "guideline",
         names=(
-            "inschrijvingsleidraad",
-            "selectieleidraad",
-            "aanbestedingsleidraad",
-            "leidraad",
             "offerteaanvraag",
             "uitnodiging tot inschrijving",
             "beschrijvend document",
@@ -88,7 +99,6 @@ RULES: tuple[Rule, ...] = (
         8,
         "form",
         names=(
-            "uea",
             "eigen verklaring",
             "formulier",
             "verklaring",

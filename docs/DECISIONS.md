@@ -409,3 +409,24 @@ Probe of 24 Nov 2026 (`scripts/fetch_tenderned_fixtures.py`, 5 anonymous request
 - **The rectifications do not explain the two deadline mismatches** (`NEXT.md` item 1). For 409819 the spreadsheet says 2026-03-09, and the API gives 2026-03-20 in both the original and the rectification. For 408259 the spreadsheet says 2026-03-06, and the API gives 2026-04-28 in both. The cause stays unknown; the API value is the one used (13 Nov finding). DD2's column and `effective_sluitingsdatum` stay as decided, but neither rectification changed a closing date.
 - **The details hold no contact keys.** The contact guard removed nothing from any of the five responses, so contact names for the Redactor come from the TED notice only.
 - **406922 is an award notice** (`Aankondiging gegunde opdracht`), kept as a fixture for its shape only. The detail also has `isVroegtijdigBeeindigd` and `isGegund`, which D8 (cancellations) should check.
+
+Final 20 tenders and download (24 Nov 2026, approved by Arthur in this day's `/build` run):
+
+- **Details check.** `scripts/check_manual_details.py` fetched the TenderNed details of the 20 provisional and 20 reserve IDs (40 anonymous GETs, 2 s apart, details only). Every provisional ID has a `pbNummerTed`, so **no replacements** were made. The replacement rule Arthur set for this check was "the next reserve ID in the same CPV group" (24 Nov), which narrows MQ1; it was not needed. Of the reserves only 431048 has no TED number.
+- **Final 20:** 409819, 410334, 408865, 413590, 413464, 417895, 413124, 423040, 417894, 427033, 422544, 430966, 417763, 427081, 409515, 413504, 430137, 422800, 417896, 409553 (9 × CPV 79, 7 × CPV 72, 4 × CPV 48; Jan 5, Feb 4, Mar 4, Apr 3, May 2, Jun 2).
+- **Replacements:** none.
+- **The S6 manual snapshot is downloaded by script, not by hand.** `scripts/download_manual.py` fetches each tender's document list and then each file through `links.download.href` (DD3), anonymously, one file at a time, 2 s apart, into `data/raw/manual/<publication_id>/`. File names are the server's `documentNaam`; on a clash the `documentId` is added. ZIPs are left packed by the download; the freeze script unpacks them (see "ZIP files" below). Run of 24 Nov: 366 requests (20 lists, 346 files), no failures. Some server names have no file extension; the freeze script decides the format from the file's magic bytes.
+
+DD5 amendment (25 Nov 2026, decided by Arthur after the M5 review ran the rules over the real file names):
+
+| Change | Reason |
+|---|---|
+| Rule 2 regex becomes `\befe? ?\d{1,2}\b` | eForms notice copies named `EFE2`/`EFE3` were not caught. |
+| The `qa` name rule (`nvi`, `nota van inlichtingen`) is checked after the contract and pricing rules | Documents revised after a Q&A round ("… na NvI 1") were labelled `qa`. |
+| `aanbestedingsdocument` and `selectiedocument` added to the guideline rule; `vraagspecificatie` to requirements | Main documents fell through to `other`. |
+| `classify_by_rule` treats `_` as a space | `\b` does not split `20260316_NvI_…`. `normalise_name` itself is unchanged. |
+| `prijzen` kept in rule 7 | D7's own case `Bijlage 7 Prijzenblad.xlsx → pricing` needs it. |
+
+ZIP files (25 Nov 2026, decided by Arthur; replaces MQ3 and "ZIPs left packed"): the freeze script (M6), before classification, unpacks every ZIP, detected by content and not by extension, with the standard-library `zipfile` module into a subfolder named after the archive. The files inside are then extracted and classified like any other. Limits per archive: path traversal and absolute paths rejected, no nested ZIPs beyond one level, at most 500 files and 500 MB unpacked. An archive over a limit, or unreadable, is reported and marked `unsupported`, and never crashes the run. The archive itself is kept as a container record, not a document.
+
+Snapshot list (25 Nov 2026, decided by Arthur): the freeze script takes its tenders from `data/snapshot_ids.txt` (committed, the final 20 above), not from whichever folders exist. A listed ID without a folder is reported; a folder not on the list is ignored and reported.

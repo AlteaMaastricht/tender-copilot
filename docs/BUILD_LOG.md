@@ -17,3 +17,10 @@ One entry per plan step that passed review. Written by the /build supervisor.
 - Tests: 1397/1397; lint clean.
 - Fix round 1: XLSX opened from bytes (names without `.xlsx`), ZIP/OLE headers checked before `%PDF`, `normalise_name` strips known extensions only.
 - Open (low): DOCX drops nested-table, `w:sdt`, `w:ins` and text-box text without a note (4 of 127 real files lose >10%); broad `except` also catches import errors, `find_tables` failure is silent; NUL test covers only `clean_text`; heading styles match exactly, not "starts with" as D5 says. pymupdf prints a hint line to stdout.
+
+### Pre-M4 (a)+(b) review (25 Nov 2026), PASS after 2 fix rounds
+- Files: `scripts/check_manual_details.py`, `scripts/download_manual.py`, `tests/test_check_manual_details.py`, `tests/test_download_manual.py`, `tests/fixtures/tenderned/synthetic/documents.json`.
+- Tests: 1441/1441; lint clean.
+- Fixes: rerun idempotent through a per-folder `.download_ids.json` (DD4); `documentId` must match `[A-Za-z0-9_-]{1,64}`; damaged index stops the run; `name_taken` recorded; stricter `resolve_href`; non-JSON 200 in the details check stops the run; contact test can fail.
+- Open (low): the 24 Nov download has no index, so a rerun downloads everything again; the name length plus ID suffix can exceed 255 bytes (uncaught `OSError`); a `name_taken` file is downloaded again on each rerun; docstring vs. behaviour for 3xx/non-JSON lists; no paging check on the list; `resolve_href` misses percent-encoded `..`; the href prefix was not checked against live hrefs.
+- The 8 non-final folders were deleted by Arthur (25 Nov).

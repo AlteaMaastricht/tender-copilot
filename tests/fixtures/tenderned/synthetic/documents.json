@@ -1,0 +1,40 @@
+{
+  "documenten": [
+    {
+      "documentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa01",
+      "documentNaam": "Leidraad.pdf",
+      "typeDocument": {"code": "PDF"},
+      "grootte": 100,
+      "links": {"download": {"href": "/papi/tenderned-rs-tns/v2/publicaties/100001/documenten/1001"}}
+    },
+    {
+      "documentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa02",
+      "documentNaam": "Leidraad.pdf",
+      "links": {"download": {"href": "https://www.tenderned.nl/papi/tenderned-rs-tns/v2/publicaties/100001/documenten/1002"}}
+    },
+    {
+      "documentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa03",
+      "documentNaam": "Bestaand.pdf",
+      "links": {"download": {"href": "/papi/tenderned-rs-tns/v2/publicaties/100001/documenten/1003"}}
+    },
+    {
+      "documentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa04",
+      "documentNaam": "../../.hidden/evil\\name.pdf",
+      "links": {"download": {"href": "/papi/tenderned-rs-tns/v2/publicaties/100001/documenten/1004"}}
+    },
+    {
+      "documentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa05",
+      "documentNaam": "Vreemd.pdf",
+      "links": {"download": {"href": "https://evil.example.com/papi/documenten/1005"}}
+    },
+    {
+      "documentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa06",
+      "documentNaam": "Archief.zip",
+      "links": {"download": {"href": "/papi/tenderned-rs-tns/v2/publicaties/100001/documenten/1006"}}
+    },
+    {
+      "documentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa07",
+      "documentNaam": "Zonder link.pdf"
+    }
+  ]
+}

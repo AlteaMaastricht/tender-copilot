@@ -444,3 +444,13 @@ DD5 amendment 2 (25 Nov 2026, decided by Arthur after the M6 offline check over 
 | ZIP members whose names differ only in letter case get a suffix | On macOS the second member overwrote the first. |
 
 Still open: rules for `gibit`, "Rectificatie" and "Inschrijvingsbiljet"; refetch of a 404 TED notice or rectification; the 24 Nov download has no download index.
+
+Snapshot v1-manual-2026-11-25 (frozen 25 Nov 2026, live run approved by Arthur):
+
+- Command: `scripts/freeze_snapshot.py --from-manual data/raw/manual --out data/snapshot --version v1-manual-2026-11-25 --max-requests 60`. 49 anonymous GETs (TenderNed detail, rectification, TED notice; 2 s apart), no document downloads, no failures. Run time 801 s, mostly text extraction.
+- Manifest sha256 `b0180db8c347a9276e0adcde756e8d19847434c0406334779973b733591ca622`, `kb_version` null. `open_snapshot` opens it and `load_tender` loads all 20 tenders.
+- 20 of 20 listed tenders frozen; none without a TED notice; no missing, empty or unlisted folders.
+- Rectifications (9): 409819, 413590, 417894, 427033, 422544, 430966, 417763, 427081, 409553.
+- 403 documents, 4,158 pages. Status: 392 ok, 3 scanned (413590, 417896, 430137), 8 unsupported (409553: 3 `.csv`, 1 `.png`, 3 `.xlsb`; 422544: 1 file without an extension). Format: 234 pdf, 104 docx, 57 xlsx, 8 other.
+- Type: annex 89, form 63, contract 54, qa 51, notice 47, requirements 26, pricing 23, guideline 22, other 28 (source `default`); 375 by rule.
+- 5 ZIPs unpacked (413464: 1, 427033: 1, 409553: 3); 58 duplicate files skipped (430966: 26, 430137: 32); 1 Office lock file skipped (409553).

@@ -54,3 +54,8 @@ One entry per plan step that passed review. Written by the /build supervisor.
 - Fix round 1: `xlsb` was a new format value outside the ARCHITECTURE.md list, now `other`; the UEA rule had been placed before contract, pricing and qa.
 - Regression check over the 402 real names: only 4 change type (1 leidraad, 3 UEA), all intended.
 - Open: no rules yet for GIBIT, "Rectificatie" and "Inschrijvingsbiljet"; a 404 TED notice or rectification is not cached or refetched; the 24 Nov download has no download index. A name like "Nota van inlichtingen aanbestedingsleidraad" would give `guideline` (follows from the approved order; no real name affected). The header comment in `ingest/classify.py` lines 22-24 is slightly out of date (low).
+
+### M6 live run (25 Nov 2026)
+- Snapshot `v1-manual-2026-11-25`: 20 tenders, 403 documents, 4,158 pages; 49 requests, no failures, 801 s. Details in DECISIONS.md.
+- Opened with `open_snapshot`; all 20 tenders load with `load_tender`. Nothing under `data/` shows in `git status`.
+- Open: `make evals` dry run on the snapshot (plan section 7) not yet run.

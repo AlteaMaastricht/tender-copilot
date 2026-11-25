@@ -2,8 +2,8 @@
 
     data/snapshot/
       manifest.json
-      tenders/<publication_id>/notice.xml, tenderned.json, contacts.json, documents.json,
-                               pages/<doc_key>.jsonl
+      tenders/<publication_id>/notice.xml, tenderned.json, [tenderned_rectification.json],
+                               contacts.json, documents.json, pages/<doc_key>.jsonl
       kb/...
 
 The manifest lists every file with its SHA-256. `open_snapshot` re-hashes all of them and
@@ -24,6 +24,7 @@ from typing import Any
 from evals.metrics import ExtractionFacts, LotFacts
 from ingest.parsing import is_placeholder_deadline, parse_sluitingsdatum
 from ingest.ted import TedNotice, parse_notice
+from ingest.tenderned import effective_sluitingsdatum
 from pipeline.citations import PageText
 
 MANIFEST = "manifest.json"
@@ -91,11 +92,12 @@ class SnapshotTender:
     tenderned: Mapping[str, Any] | None  # publication detail; None without a TenderNed match
     contact_names: tuple[str, ...]  # for the Redactor only
     docs: TenderDocs
+    tenderned_rectification: Mapping[str, Any] | None = None  # the rectifying publication, if any
 
     @property
     def sluitingsdatum(self) -> str | None:
-        value = self.tenderned.get("sluitingsDatum") if self.tenderned else None
-        return value if isinstance(value, str) else None
+        """The closing date as written: the rectification's when it has one (DD2)."""
+        return effective_sluitingsdatum(self.tenderned, self.tenderned_rectification)
 
 
 # --- manifest and hash ---------------------------------------------------------
@@ -226,7 +228,9 @@ def load_tender(snapshot: Snapshot, publication_id: int) -> SnapshotTender:
             for row in listing["documents"]
         )
         detail_path, contacts_path = folder / "tenderned.json", folder / "contacts.json"
+        rectification_path = folder / "tenderned_rectification.json"
         detail = _json(detail_path) if detail_path.is_file() else None
+        rectification = _json(rectification_path) if rectification_path.is_file() else None
         names = _json(contacts_path).get("names", []) if contacts_path.is_file() else []
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise SnapshotError(
@@ -238,6 +242,7 @@ def load_tender(snapshot: Snapshot, publication_id: int) -> SnapshotTender:
         tenderned=detail,
         contact_names=tuple(str(name) for name in names),
         docs=TenderDocs(publication_id, str(listing["documents_access"]), documents),
+        tenderned_rectification=rectification,
     )
 
 

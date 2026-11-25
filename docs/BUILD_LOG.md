@@ -30,3 +30,19 @@ One entry per plan step that passed review. Written by the /build supervisor.
 - Tests: 1454/1454; lint clean.
 - Escalated on 24 Nov: the D7 table mislabelled real names. Arthur approved the DD5 amendment on 25 Nov. Fix round 1: whitespace collapsed again after `_` becomes a space.
 - Open (labels the amended table gives as written): UEA files give `guideline` (`aanbestedingsdocument` before `uea`); "Aanbestedingsleidraad raamovereenkomst …" gives `contract`; some "… na NvI" files without a contract or pricing word stay `qa`; `verklaring` catches an auditor's statement; `gibit`, "Rectificatie", "Aanvullende mededelingen", "staat van ontleding …", "Inschrijvingsbiljet" and "Invulformat kwaliteit" have no fitting rule; substrings such as `contract` in `contractmanager`. Archive files must not be passed to `classify_by_rule` (M6).
+
+### M6: freeze script with `--from-manual` (25 Nov 2026), PASS
+- Files: `scripts/freeze_snapshot.py`, `tests/test_freeze_snapshot.py`, `data/snapshot_ids.txt`, `evals/snapshot.py`, `tests/test_evals_snapshot.py`, `docs/EVALS.md`.
+- Tests: 1493/1493; lint clean. No network calls; the live run was not made.
+- Approved changes: tenders from `data/snapshot_ids.txt`; missing, empty and unlisted folders reported; ZIPs unpacked by content with `zipfile` (traversal and absolute paths rejected, one nesting level, 500 files and 500 MB per archive), and the archive kept as a container record (`containers` list in `documents.json`, builder's choice).
+- Offline check over the 20 folders (no fetch): 340 direct files, 5 ZIPs with 64 unpacked files, 58 duplicates skipped, 404 document rows. No crash and no archive refused.
+- Open (low):
+  - an empty existing `--out` passes the check but fails at install;
+  - case-insensitive clash of ZIP members on macOS;
+  - the "limit while reading" test cannot fail;
+  - unsupported entries show a fake extension instead of the detected format;
+  - `~$` Office lock files are not skipped;
+  - a 404 rectification or TED notice is not cached;
+  - `.xlsb` is detected as xlsx and fails (M4);
+  - the container schema line in EVALS.md needs Arthur's confirmation;
+  - the freeze needs about 13 min of CPU.

@@ -207,3 +207,48 @@ def test_the_snapshot_summary_is_recorded_in_the_results(tmp_path):
         "tenders": 4,
     }
     assert make_config(tmp_path).snapshot_dir == SNAPSHOT
+
+
+# --- rectifications (DD2) ----------------------------------------------------------------------
+
+
+def _with_rectification(tmp_path: Path, content: dict | None) -> Path:
+    root = copy_snapshot(tmp_path)
+    if content is not None:
+        path = root / "tenders" / "9002" / "tenderned_rectification.json"
+        path.write_text(json.dumps(content))
+    manifest = build_manifest(root, snapshot_version="test-fixture-3", frozen_at="2026-11-16")
+    (root / "manifest.json").write_text(json.dumps(manifest))
+    return root
+
+
+def test_the_rectification_gives_the_closing_date_and_the_original_is_kept(tmp_path):
+    original = load_tender(open_snapshot(SNAPSHOT), 9002)
+    assert original.tenderned_rectification is None
+    assert original.sluitingsdatum == original.tenderned["sluitingsDatum"]
+
+    root = _with_rectification(tmp_path, {"sluitingsDatum": "2026-05-18T09:30:00"})
+    tender = load_tender(open_snapshot(root), 9002)
+    assert tender.sluitingsdatum == "2026-05-18T09:30:00"
+    assert tender.tenderned["sluitingsDatum"] == original.tenderned["sluitingsDatum"]
+    assert ground_truth(tender).deadline.isoformat() == "2026-05-18T09:30:00+02:00"
+
+
+def test_a_rectification_without_a_closing_date_falls_back_to_the_original(tmp_path):
+    original = load_tender(open_snapshot(SNAPSHOT), 9002)
+    cases = ({"publicatieId": 1}, {"sluitingsDatum": None}, {"sluitingsDatum": " "})
+    for number, content in enumerate(cases):
+        root = _with_rectification(tmp_path / str(number), content)
+        tender = load_tender(open_snapshot(root), 9002)
+        assert tender.sluitingsdatum == original.sluitingsdatum
+
+
+def test_a_rectification_is_read_even_without_a_tenderned_json(tmp_path):
+    original = load_tender(open_snapshot(SNAPSHOT), 9002)
+    assert original.tenderned is not None
+    root = _with_rectification(tmp_path, {"sluitingsDatum": "2026-05-18T09:30:00"})
+    (root / "tenders" / "9002" / "tenderned.json").unlink()
+    manifest = build_manifest(root, snapshot_version="test-fixture-3", frozen_at="2026-11-16")
+    (root / "manifest.json").write_text(json.dumps(manifest))
+    # The rectification still counts: effective_sluitingsdatum reads it on its own.
+    assert load_tender(open_snapshot(root), 9002).sluitingsdatum == "2026-05-18T09:30:00"

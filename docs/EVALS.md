@@ -56,8 +56,9 @@ data/snapshot/
   tenders/<publication_id>/
     notice.xml         TED eForms XML, read with ingest.ted.parse_notice
     tenderned.json     publication detail; `sluitingsDatum` is read from it
+    tenderned_rectification.json   optional, see below
     contacts.json      {"names": [...]}: for the Redactor only
-    documents.json     {"documents_access": "...", "documents": [...]}
+    documents.json     {"documents_access": "...", "documents": [...], "containers": [...]}
     pages/<doc_key>.jsonl    {"page_no": 1, "text": "..."} per line
   kb/                  the company KB files the run used
 ```
@@ -70,7 +71,8 @@ data/snapshot/
 - `contacts.json` and `tenderned.json` are optional. Without `tenderned.json` the tender has no TenderNed match.
 - `tenderned_rectification.json` is optional: the publication named by `publicatieIDLaatsteRectificatie`, contact keys removed. When it exists and has a `sluitingsDatum`, that value is the closing date (`effective_sluitingsdatum`, DD2); the original `tenderned.json` is kept as it was.
 - In a manual snapshot (`freeze_snapshot.py --from-manual`) documents have `published_at = null` and `language = null`, and `is_current` is true for every document.
-- Nothing writes this folder yet. The freeze script is a separate task; `evals.snapshot.build_manifest` gives it the manifest.
+- `containers` in `documents.json` is optional and written by the freeze script: one record per ZIP file ({`filename`, `container: true`, `status` `unpacked` or `unsupported`, `reason`, `members`}). A container is not a document: it has no `document_id`, `doc_key` or pages, and readers use `documents` only. The files unpacked from it are ordinary documents named `<archive path>/<member path>`.
+- `scripts/freeze_snapshot.py --from-manual` writes this folder; `evals.snapshot.build_manifest` gives it the manifest.
 
 ## 4. Metrics: exact formulas
 
